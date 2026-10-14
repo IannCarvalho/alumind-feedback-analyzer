@@ -131,6 +131,68 @@ def generate_email_content(stats):
     return email_content
 
 
+def generate_email_content_llm(stats):
+    """Generate the weekly summary email body with help from an LLM.
+
+    Builds a short prompt from the already-computed stats and asks the model to
+    write a concise HTML summary in Portuguese. On ANY failure (no API key,
+    network error, bad output) it falls back to the deterministic template in
+    generate_email_content, so e-mail delivery is never blocked by the LLM.
+
+    Args:
+        stats (dict): Feedback statistics (same shape as generate_weekly_summary).
+
+    Returns:
+        str: HTML email content.
+    """
+    if stats['total_feedbacks'] == 0:
+        return generate_email_content(stats)
+
+    if not Config.OPENAI_API_KEY:
+        logger.info("No OpenAI key configured; using the static email template.")
+        return generate_email_content(stats)
+
+    features_lines = "\n".join(
+        f"- {f['code']} (mencionada {f['count']}x)"
+        for f in stats['top_features']
+    ) or "- Nenhuma funcionalidade recorrente."
+
+    prompt_text = (
+        "Voce e um assistente que escreve um resumo semanal de feedbacks para "
+        "stakeholders de um produto. Escreva um e-mail curto e profissional em "
+        "portugues, em HTML simples (sem <html>/<body>, apenas <h2>/<h3>/<p>/<ul>), "
+        "com base nestes numeros da semana:\n\n"
+        f"Total de feedbacks: {stats['total_feedbacks']}\n"
+        f"Positivos: {stats['positive_percentage']:.1f}%\n"
+        f"Negativos: {stats['negative_percentage']:.1f}%\n"
+        f"Funcionalidades mais pedidas:\n{features_lines}\n\n"
+        "Para cada funcionalidade pedida, explique brevemente por que seria "
+        "importante te-la. Termine com uma assinatura do 'FeedLens'."
+    )
+
+    try:
+        # Imported lazily so the module (and its tests) do not require langchain
+        # just to use the static template.
+        from langchain.chat_models import ChatOpenAI
+        from langchain.prompts import ChatPromptTemplate
+
+        llm = ChatOpenAI(
+            model_name=Config.OPENAI_MODEL,
+            temperature=0.3,
+            openai_api_key=Config.OPENAI_API_KEY,
+        )
+        prompt = ChatPromptTemplate.from_template("{body}")
+        chain = prompt | llm
+        response = chain.invoke({"body": prompt_text})
+        content = (response.content or "").strip()
+        if not content:
+            raise ValueError("Empty LLM response")
+        return f"<html><body>{content}</body></html>"
+    except Exception as e:  # noqa: BLE001 - any failure must fall back safely
+        logger.warning(f"LLM email generation failed, using template: {e}")
+        return generate_email_content(stats)
+
+
 def send_weekly_summary_email():
     """
     Generates and sends weekly summary email
@@ -151,8 +213,8 @@ def send_weekly_summary_email():
     # Generate week's statistics
     stats = generate_weekly_summary()
 
-    # Generate email content
-    email_content = generate_email_content(stats)
+    # Generate email content (LLM with graceful fallback to the static template)
+    email_content = generate_email_content_llm(stats)
 
     # Create message
     msg = MIMEMultipart('alternative')
