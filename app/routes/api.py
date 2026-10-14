@@ -33,7 +33,7 @@ def validate_feedback_request() -> Dict[str, Any]:
     try:
         uuid.UUID(str(data['id']))
     except (ValueError, AttributeError, TypeError):
-        raise ValueError('Field "id" must be a valid UUID')
+        raise ValueError('Field "id" must be a valid UUID') from None
 
     if not str(data['feedback']).strip():
         raise ValueError('Field "feedback" must not be empty')
