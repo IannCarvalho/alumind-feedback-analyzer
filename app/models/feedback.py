@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import String, Text, DateTime, Boolean, ForeignKey
@@ -28,7 +28,7 @@ class Feedback(db.Model):
     sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_spam: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow)
+        DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationship with requested features
     requested_features: Mapped[List['RequestedFeature']] = relationship(
@@ -79,7 +79,7 @@ class RequestedFeature(db.Model):
     code: Mapped[str] = mapped_column(String(50), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow)
+        DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationship with feedback
     feedback: Mapped['Feedback'] = relationship(
