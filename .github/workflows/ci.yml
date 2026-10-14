@@ -39,7 +39,7 @@ jobs:
         env:
           OPENAI_API_KEY: test-key
           SECRET_KEY: test-secret
-          DATABASE_URL: sqlite:///:memory:
+          DATABASE_URL: "sqlite:///:memory:"
         run: |
           if [ -d tests ]; then
             pytest tests
