@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - FeedLens{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Dashboard</h1>
+    
+    {% if not has_data %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>Nenhum feedback foi registrado ainda.
+    </div>
+    {% else %}
+    
+    <!-- Statistics Overview -->
+    <div class="row mb-4">
+        <div class="col-md-4 mb-3 mb-md-0">
+            <div class="card dashboard-card h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total de Feedbacks</h5>
+                    <p class="display-4">{{ total_feedbacks }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4 mb-3 mb-md-0">
+            <div class="card dashboard-card h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Feedbacks Positivos</h5>
+                    <p class="display-4 sentiment-positive">{{ sentiment_percentages.POSITIVO|round(1) }}%</p>
+                    <p class="text-muted">({{ sentiment_counts.POSITIVO }} feedbacks)</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card dashboard-card h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Feedbacks Negativos</h5>
+                    <p class="display-4 sentiment-negative">{{ sentiment_percentages.NEGATIVO|round(1) }}%</p>
+                    <p class="text-muted">({{ sentiment_counts.NEGATIVO }} feedbacks)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-4 mb-lg-0">
+            <div class="card dashboard-card h-100">
+                <div class="card-header">
+                    <h5 class="m-0">Distribuição de Sentimentos</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="sentimentChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card dashboard-card h-100">
+                <div class="card-header">
+                    <h5 class="m-0">Funcionalidades Mais Solicitadas</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="featuresChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Top Requested Features -->
+    <div class="card responsive-table-card mb-4">
+        <div class="card-header">
+            <h5 class="m-0">Top Funcionalidades Solicitadas</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Quantidade</th>
+                            <th>% dos Feedbacks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for feature in top_features %}
+                        <tr>
+                            <td data-label="Código">{{ feature.code }}</td>
+                            <td data-label="Quantidade">{{ feature.count }}</td>
+                            <td data-label="% dos Feedbacks">{{ feature.percentage|round(1) }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Feedbacks -->
+    <div class="card responsive-table-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="m-0">Feedbacks Recentes</h5>
+            <a href="{{ url_for('web.feedback_list') }}" class="btn btn-sm btn-outline-primary">Ver Todos</a>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Feedback</th>
+                            <th>Sentimento</th>
+                            <th>Data</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for feedback in recent_feedbacks %}
+                        <tr>
+                            <td data-label="ID">{{ feedback.id }}</td>
+                            <td data-label="Feedback">{{ feedback.feedback_text|truncate(50) }}</td>
+                            <td data-label="Sentimento">
+                                {% if feedback.sentiment == 'POSITIVO' %}
+                                <span class="badge bg-success">Positivo</span>
+                                {% elif feedback.sentiment == 'NEGATIVO' %}
+                                <span class="badge bg-danger">Negativo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inconclusivo</span>
+                                {% endif %}
+                            </td>
+                            <td data-label="Data">{{ feedback.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td data-label="Ações">
+                                <a href="{{ url_for('web.feedback_detail', feedback_id=feedback.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if has_data %}
+<script>
+    // Configuração comum para os gráficos
+    const chartConfig = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: window.innerWidth < 768 ? 'bottom' : 'right',
+                labels: {
+                    boxWidth: 12,
+                    padding: 15
+                }
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const label = context.label || '';
+                        const value = context.raw || 0;
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = Math.round((value / total) * 100);
+                        return `${label}: ${value} (${percentage}%)`;
+                    }
+                }
+            }
+        }
+    };
+
+    // Sentiment Chart
+    const sentimentChart = new Chart(
+        document.getElementById('sentimentChart'),
+        {
+            type: 'pie',
+            data: {
+                labels: ['Positivo', 'Negativo', 'Inconclusivo'],
+                datasets: [{
+                    data: [
+                        {{ sentiment_counts.POSITIVO }},
+                        {{ sentiment_counts.NEGATIVO }},
+                        {{ sentiment_counts.INCONCLUSIVO }}
+                    ],
+                    backgroundColor: [
+                        '#28a745',
+                        '#dc3545',
+                        '#6c757d'
+                    ]
+                }]
+            },
+            options: chartConfig
+        }
+    );
+    
+    // Features Chart - Responsive bar chart
+    const featuresChart = new Chart(
+        document.getElementById('featuresChart'),
+        {
+            type: 'bar',
+            data: {
+                labels: [
+                    {% for feature in top_features[:5] %}
+                    '{{ feature.code }}',
+                    {% endfor %}
+                ],
+                datasets: [{
+                    label: 'Quantidade de Solicitações',
+                    data: [
+                        {% for feature in top_features[:5] %}
+                        {{ feature.count }},
+                        {% endfor %}
+                    ],
+                    backgroundColor: '#007bff'
+                }]
+            },
+            options: {
+                ...chartConfig,
+                indexAxis: window.innerWidth < 768 ? 'y' : 'x', // Barras horizontais em telas pequenas
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        }
+    );
+    
+    // Atualiza os gráficos quando a janela é redimensionada
+    window.addEventListener('resize', function() {
+        // Ajusta a posição da legenda
+        sentimentChart.options.plugins.legend.position = window.innerWidth < 768 ? 'bottom' : 'right';
+        sentimentChart.update();
+        
+        // Ajusta a orientação do gráfico de barras
+        featuresChart.options.indexAxis = window.innerWidth < 768 ? 'y' : 'x';
+        featuresChart.update();
+    });
+</script>
+{% endif %}
+{% endblock %}

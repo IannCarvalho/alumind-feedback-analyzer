@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block title %}Detalhes do Feedback - FeedLens{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center flex-wrap mb-4">
+        <h1 class="mb-2 mb-md-0">Detalhes do Feedback</h1>
+        <a href="{{ url_for('web.feedback_list') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Voltar para a Lista
+        </a>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="m-0">Informações Básicas</h5>
+                <span class="badge rounded-pill 
+                    {% if feedback.sentiment == 'POSITIVO' %}bg-success
+                    {% elif feedback.sentiment == 'NEGATIVO' %}bg-danger
+                    {% else %}bg-secondary{% endif %}">
+                    {{ feedback.sentiment }}
+                </span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>ID:</strong> {{ feedback.id }}</p>
+                    <p><strong>Data de Criação:</strong> {{ feedback.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                    <p>
+                        <strong>Sentimento:</strong>
+                        {% if feedback.sentiment == 'POSITIVO' %}
+                        <span class="text-success">Positivo</span>
+                        {% elif feedback.sentiment == 'NEGATIVO' %}
+                        <span class="text-danger">Negativo</span>
+                        {% else %}
+                        <span class="text-secondary">Inconclusivo</span>
+                        {% endif %}
+                    </p>
+                    <p>
+                        <strong>Spam:</strong>
+                        {% if feedback.is_spam %}
+                        <span class="text-danger">Sim</span>
+                        {% else %}
+                        <span class="text-success">Não</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="m-0">Texto do Feedback</h5>
+        </div>
+        <div class="card-body">
+            <div class="p-3 bg-light rounded">
+                <p class="mb-0">{{ feedback.feedback_text }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card responsive-table-card">
+        <div class="card-header">
+            <h5 class="m-0">Funcionalidades Solicitadas</h5>
+        </div>
+        <div class="card-body">
+            {% if feedback.requested_features %}
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Motivo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for feature in feedback.requested_features %}
+                        <tr>
+                            <td data-label="Código">{{ feature.code }}</td>
+                            <td data-label="Motivo">{{ feature.reason }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                Nenhuma funcionalidade específica foi identificada neste feedback.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
