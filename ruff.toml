@@ -1,0 +1,22 @@
+# Ruff configuration.
+#
+# Conjunto pragmatico: foca em erros reais (pyflakes F, erros do pycodestyle E/W)
+# e pega bugs comuns (bugbear B). Modernizacoes de tipagem (UP: List->list) e
+# ordenacao de imports (I) ficam de fora por ora para nao exigir uma reescrita
+# em massa do codigo existente; podem ser habilitadas num PR dedicado depois.
+
+target-version = "py310"
+line-length = 100
+
+[lint]
+select = ["F", "E", "W", "B"]
+ignore = [
+    "E501",   # linha longa (templates de prompt e strings de e-mail)
+    "B008",   # chamada em default de argumento (padrao comum no Flask)
+    "E712",   # '== False' e o idioma correto em filtros SQLAlchemy (vira SQL), nao comparacao Python
+    "W293",   # espaco em linha em branco dentro do template HTML do e-mail (cosmetico)
+]
+
+[lint.per-file-ignores]
+"migrations/*" = ["F", "E", "W", "B"]  # scaffolding gerado pelo Alembic
+"tests/*" = ["E402"]                    # import apos setup de env no conftest
