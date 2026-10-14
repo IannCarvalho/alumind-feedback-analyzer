@@ -2,7 +2,7 @@ import logging
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 
 from app import db
@@ -20,7 +20,7 @@ def generate_weekly_summary():
         dict: Dictionary with feedback statistics and summary
     """
     # Define the last week period
-    end_date = datetime.utcnow()
+    end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=7)
 
     # Query feedback from last week that isn't spam

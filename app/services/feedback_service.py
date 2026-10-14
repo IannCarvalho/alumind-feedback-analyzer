@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict
+from app import db
 from app.models.feedback import Feedback
 from sqlalchemy import desc
 
@@ -9,7 +10,7 @@ class FeedbackService:
     @staticmethod
     def get_feedback_by_id(feedback_id: str) -> Optional[Feedback]:
         """Get a feedback by its ID"""
-        return Feedback.query.get(feedback_id)
+        return db.session.get(Feedback, feedback_id)
 
     @staticmethod
     def get_recent_feedbacks(limit: int = 10) -> List[Feedback]:

@@ -1,3 +1,4 @@
+import uuid
 from flask import Blueprint, request, jsonify
 from typing import Dict, Any
 from app import db
@@ -26,6 +27,16 @@ def validate_feedback_request() -> Dict[str, Any]:
 
     if 'id' not in data or 'feedback' not in data:
         raise ValueError('Fields "id" and "feedback" are required')
+
+    # Validate that the id is a well-formed UUID. Doing it here returns a
+    # clean 400 instead of letting a malformed id blow up at commit time.
+    try:
+        uuid.UUID(str(data['id']))
+    except (ValueError, AttributeError, TypeError):
+        raise ValueError('Field "id" must be a valid UUID')
+
+    if not str(data['feedback']).strip():
+        raise ValueError('Field "feedback" must not be empty')
 
     return data
 
