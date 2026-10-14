@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 from typing import Dict, List
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import String, Text, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 import uuid
 
 from app import db
+from app.models.types import GUID
 
 
 class Feedback(db.Model):
@@ -22,8 +22,8 @@ class Feedback(db.Model):
     """
     __tablename__ = 'feedbacks'
 
-    id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), primary_key=True, default=uuid.uuid4)
     feedback_text: Mapped[str] = mapped_column(Text, nullable=False)
     sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_spam: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -72,10 +72,10 @@ class RequestedFeature(db.Model):
     """
     __tablename__ = 'requested_features'
 
-    id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    feedback_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey('feedbacks.id'), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), primary_key=True, default=uuid.uuid4)
+    feedback_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey('feedbacks.id'), nullable=False)
     code: Mapped[str] = mapped_column(String(50), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
