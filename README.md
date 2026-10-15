@@ -206,6 +206,8 @@ docker compose exec web python -c "from app import create_app, db; app=create_ap
 }
 ```
 
+**Rate limiting:** este endpoint público é limitado (padrão `30 per minute` por IP) via [Flask-Limiter](https://flask-limiter.readthedocs.io/). Ao exceder o limite a resposta é `429 Too Many Requests` com corpo JSON. Configurável por `RATELIMIT_INGEST`, `RATELIMIT_ENABLED` e `RATELIMIT_STORAGE_URI` (use `redis://...` em produção com múltiplos workers; o default `memory://` serve a um único processo). Os endpoints `GET` não são limitados.
+
 ### Listar Feedbacks
 
 **Endpoint:** `GET /api/feedbacks`

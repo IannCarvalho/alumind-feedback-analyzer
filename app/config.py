@@ -74,6 +74,17 @@ class Config:
     # Email recipients for weekly summary
     EMAIL_RECIPIENTS: List[str] = get_env_list('EMAIL_RECIPIENTS')
 
+    # Rate limiting (Flask-Limiter)
+    # Liga/desliga o limitador globalmente (desligado nos testes).
+    RATELIMIT_ENABLED: bool = get_env_bool('RATELIMIT_ENABLED', True)
+    # Backend de armazenamento. 'memory://' serve para single-process; em
+    # produção com múltiplos workers aponte para um Redis (ex redis://...).
+    RATELIMIT_STORAGE_URI: str = os.environ.get(
+        'RATELIMIT_STORAGE_URI', 'memory://')
+    # Limite aplicado ao endpoint público de ingestão (POST /api/feedbacks).
+    RATELIMIT_INGEST: str = os.environ.get(
+        'RATELIMIT_INGEST', '30 per minute')
+
     @classmethod
     def is_development(cls) -> bool:
         """Check if running in development environment"""

@@ -10,6 +10,10 @@ import os
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret")
+# Desliga o rate-limit nos testes: o limitador é configurado no init_app a
+# partir do config (lido do ambiente), então precisa estar definido aqui,
+# antes de qualquer import do app, e não após create_app().
+os.environ.setdefault("RATELIMIT_ENABLED", "false")
 
 import pytest
 
