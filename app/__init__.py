@@ -40,6 +40,12 @@ def validate_config(config: Type[Config]) -> None:
     if config.is_production() and not config.has_email_config():
         raise ValueError('Email configuration is required in production')
 
+    # Warn when the dashboard is left open in production
+    if config.is_production() and not config.DASHBOARD_PASSWORD:
+        logger.warning(
+            'DASHBOARD_PASSWORD is not set. The dashboard is publicly '
+            'accessible without authentication.')
+
 
 def init_extensions(app: Flask) -> None:
     """
@@ -64,6 +70,16 @@ def register_blueprints(app: Flask) -> None:
 
     from app.routes.web import web as web_blueprint
     app.register_blueprint(web_blueprint)
+
+    from app.auth import auth as auth_blueprint
+    app.register_blueprint(auth_blueprint)
+
+    from app.auth import auth_enabled
+
+    @app.context_processor
+    def inject_auth_flags():
+        """Disponibiliza o estado da autenticação para os templates."""
+        return {'auth_enabled': auth_enabled()}
 
 
 def init_scheduler(app: Flask) -> None:

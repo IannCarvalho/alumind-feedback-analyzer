@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, abort
+from app.auth import login_required
 from app.services.statistics_service import Statistics
 from app.services.feedback_service import FeedbackService
 
@@ -6,12 +7,14 @@ web = Blueprint('web', __name__)
 
 
 @web.route('/')
+@login_required
 def index():
     """Redirect to the dashboard page"""
     return redirect(url_for('web.dashboard'))
 
 
 @web.route('/dashboard')
+@login_required
 def dashboard():
     """
     Main dashboard page
@@ -29,6 +32,7 @@ def dashboard():
 
 
 @web.route('/feedback/<feedback_id>')
+@login_required
 def feedback_detail(feedback_id: str):
     """
     Feedback details page
@@ -43,6 +47,7 @@ def feedback_detail(feedback_id: str):
 
 
 @web.route('/feedbacks')
+@login_required
 def feedback_list():
     """
     Feedback listing page with filters

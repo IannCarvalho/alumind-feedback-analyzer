@@ -116,6 +116,7 @@ cp .env-example .env
 FLASK_APP=run.py
 FLASK_ENV=development
 SECRET_KEY=sua_chave_secreta
+DASHBOARD_PASSWORD=senha_de_acesso_ao_painel
 DATABASE_URL=postgresql://usuario:senha@localhost/feedlens
 OPENAI_API_KEY=sua_chave_api_openai
 OPENAI_MODEL=gpt-4o-mini
@@ -144,6 +145,15 @@ flask run
 A aplicação estará disponível em `http://localhost:5000`.
 
 > **Nota de segurança:** por padrão, em desenvolvimento, o servidor roda com `debug=True` e faz bind em `0.0.0.0`. Em produção, use um servidor WSGI (ex: `gunicorn`), desligue o debug e defina `FLASK_ENV=production`.
+
+### Autenticação do Dashboard
+
+As rotas web do painel (`/`, `/dashboard`, `/feedbacks`, `/feedback/<id>`) são protegidas por uma **senha única compartilhada**, definida em `DASHBOARD_PASSWORD`. Ao acessar sem sessão, o usuário é levado à tela de login (`/login`); a sessão fica num cookie assinado pela `SECRET_KEY`.
+
+- **Com `DASHBOARD_PASSWORD` definida:** o painel exige login e exibe um botão "Sair".
+- **Sem `DASHBOARD_PASSWORD` (vazia):** o painel fica aberto, sem login — conveniente em desenvolvimento. Em produção sem senha, um aviso é registrado no log.
+
+A API (`/api/...`) **não** é afetada por essa autenticação: ela tem seu próprio contrato de ingestão de feedbacks.
 
 ### Executando com Docker
 
