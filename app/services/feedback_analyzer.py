@@ -1,10 +1,54 @@
 import json
 import logging
+from typing import List
+
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field, ValidationError, field_validator
+
 from app.config import Config
 
 logger = logging.getLogger(__name__)
+
+VALID_SENTIMENTS = {"POSITIVO", "NEGATIVO", "INCONCLUSIVO"}
+DEFAULT_SENTIMENT = "INCONCLUSIVO"
+
+
+class RequestedFeatureModel(BaseModel):
+    """One feature requested by the user, as parsed from the LLM output."""
+
+    code: str
+    reason: str = ""
+
+
+class FeedbackAnalysis(BaseModel):
+    """Validated shape of the LLM analysis.
+
+    Pydantic normalises the payload: an unknown or missing sentiment becomes
+    INCONCLUSIVO, is_spam defaults to False and malformed features are dropped
+    rather than blowing up the request.
+    """
+
+    sentiment: str = DEFAULT_SENTIMENT
+    is_spam: bool = False
+    requested_features: List[RequestedFeatureModel] = Field(default_factory=list)
+
+    @field_validator("sentiment", mode="before")
+    @classmethod
+    def _normalise_sentiment(cls, value: object) -> str:
+        if not isinstance(value, str):
+            return DEFAULT_SENTIMENT
+        upper = value.strip().upper()
+        return upper if upper in VALID_SENTIMENTS else DEFAULT_SENTIMENT
+
+
+def _default_result() -> dict:
+    """Canonical safe result used whenever analysis cannot be trusted."""
+    return {
+        "sentiment": DEFAULT_SENTIMENT,
+        "is_spam": False,
+        "requested_features": [],
+    }
 
 
 class FeedbackAnalyzer:
@@ -18,10 +62,14 @@ class FeedbackAnalyzer:
         if not api_key:
             raise ValueError("OpenAI API Key not configured")
 
+        # Ask the model to return a JSON object directly. This removes most of
+        # the "find the braces in free-form prose" guesswork; the embedded-JSON
+        # fallback below still covers models that ignore the hint.
         self.llm = ChatOpenAI(
             model_name=model_name,
             temperature=0.0,
-            openai_api_key=api_key
+            openai_api_key=api_key,
+            model_kwargs={"response_format": {"type": "json_object"}},
         )
 
     def analyze_feedback(self, feedback_text):
@@ -32,7 +80,7 @@ class FeedbackAnalyzer:
             feedback_text (str): Feedback text
 
         Returns:
-            dict: Dictionary with sentiment and requested features
+            dict: Dictionary with sentiment, is_spam and requested features
         """
         prompt = ChatPromptTemplate.from_template("""
         Você é um assistente especializado em analisar feedbacks de usuários de um
@@ -48,7 +96,7 @@ class FeedbackAnalyzer:
         - Um código único para a funcionalidade (use letras maiúsculas e sublinhado, como EDITAR_PERFIL)
         - Uma razão explicando por que o usuário quer essa funcionalidade
 
-        Retorne o resultado no formato JSON com as seguintes chaves:
+        Retorne APENAS um objeto JSON com as seguintes chaves:
         - sentiment: string (POSITIVO, NEGATIVO ou INCONCLUSIVO)
         - is_spam: booleano (true/false)
         - requested_features: array de objetos com as chaves 'code' e 'reason'
@@ -59,36 +107,40 @@ class FeedbackAnalyzer:
         chain = prompt | self.llm
         response = chain.invoke({"feedback": feedback_text})
 
-        # Extract JSON from response
+        raw = self._extract_json(response.content)
+        if raw is None:
+            logger.error("Could not locate JSON in LLM response")
+            return _default_result()
+
         try:
-            # Try to find JSON in response
-            content = response.content
-            # Find start and end of JSON
-            start_idx = content.find('{')
-            end_idx = content.rfind('}') + 1
+            analysis = FeedbackAnalysis.model_validate(raw)
+        except ValidationError as e:
+            logger.error(f"LLM analysis failed schema validation: {e}")
+            return _default_result()
 
-            if start_idx != -1 and end_idx != -1:
-                json_str = content[start_idx:end_idx]
-                result = json.loads(json_str)
-            else:
-                # If specific JSON format not found, try to parse complete text
-                result = json.loads(content)
+        return analysis.model_dump()
 
-            # Ensure result has expected structure
-            if 'sentiment' not in result:
-                result['sentiment'] = 'INCONCLUSIVO'
-            if 'is_spam' not in result:
-                result['is_spam'] = False
-            if 'requested_features' not in result:
-                result['requested_features'] = []
+    @staticmethod
+    def _extract_json(content: str):
+        """Parse a JSON object out of the model response.
 
-            return result
+        With response_format=json_object the whole content is already JSON, so
+        the direct parse wins. The brace-slice is kept as a defensive fallback
+        for models that wrap the JSON in prose.
+        """
+        if not content:
+            return None
 
-        except (json.JSONDecodeError, ValueError) as e:
-            # In case of error in analysis, return default result
-            logger.error(f"Error analyzing LLM response: {e}")
-            return {
-                'sentiment': 'INCONCLUSIVO',
-                'is_spam': False,
-                'requested_features': []
-            }
+        try:
+            return json.loads(content)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        start_idx = content.find("{")
+        end_idx = content.rfind("}") + 1
+        if start_idx != -1 and end_idx > start_idx:
+            try:
+                return json.loads(content[start_idx:end_idx])
+            except (json.JSONDecodeError, ValueError):
+                return None
+        return None

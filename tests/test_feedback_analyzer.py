@@ -63,3 +63,31 @@ def test_missing_keys_are_filled_with_defaults():
     assert result["sentiment"] == "POSITIVO"
     assert result["is_spam"] is False
     assert result["requested_features"] == []
+
+
+def test_unknown_sentiment_is_normalised_to_inconclusivo():
+    # An out-of-vocabulary sentiment must be coerced, not passed through.
+    result = _run_with_response('{"sentiment": "FELIZ", "is_spam": false}')
+    assert result["sentiment"] == "INCONCLUSIVO"
+
+
+def test_lowercase_sentiment_is_upcased():
+    result = _run_with_response('{"sentiment": "negativo"}')
+    assert result["sentiment"] == "NEGATIVO"
+
+
+def test_feature_without_reason_defaults_to_empty_string():
+    content = '{"sentiment": "POSITIVO", "requested_features": [{"code": "DARK_MODE"}]}'
+    result = _run_with_response(content)
+    assert result["requested_features"][0]["code"] == "DARK_MODE"
+    assert result["requested_features"][0]["reason"] == ""
+
+
+def test_bad_feature_shape_fails_validation_and_falls_back():
+    # A feature that is not an object (missing required 'code') makes the whole
+    # payload invalid, so the analyzer returns the safe default rather than a
+    # half-parsed structure.
+    content = '{"sentiment": "POSITIVO", "requested_features": ["not-an-object"]}'
+    result = _run_with_response(content)
+    assert result["sentiment"] == "INCONCLUSIVO"
+    assert result["requested_features"] == []
