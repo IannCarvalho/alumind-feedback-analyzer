@@ -281,10 +281,7 @@ A aplicação envia automaticamente um resumo semanal dos feedbacks para os stak
 - Porcentagem de feedbacks positivos e negativos
 - Principais funcionalidades solicitadas
 
-Para testar manualmente o envio de e-mails, execute:
-```bash
-python test_email.py
-```
+O envio é agendado via APScheduler. O texto do resumo é gerado por LLM, com fallback para um template estático quando a geração falha ou não há chave configurada.
 
 ## Considerações de Desenvolvimento
 
@@ -309,10 +306,16 @@ python test_email.py
 
 ## Possíveis Melhorias
 
-1. **Autenticação e Autorização:** login para o dashboard e níveis de permissão
-2. **Testes Automatizados:** testes unitários dos serviços e de integração da API
-3. **UI/UX:** mais filtros, ordenação, responsividade e exportação de relatórios (PDF/CSV)
-4. **Escalabilidade:** cache para consultas frequentes e fila de processamento para análises
-5. **Monitoramento:** integração com logging/observabilidade e métricas de desempenho
-6. **CI/CD:** pipeline de testes e deploy automatizados
-7. **Frontend:** evoluir para um frontend desacoplado baseado em componentes (ex: React)
+Já entregues: autenticação por senha no dashboard, suite de testes (pytest), CI (GitHub Actions), dockerização e resumo de e-mail gerado por LLM.
+
+Próximos passos possíveis:
+
+1. **UI/UX:** mais filtros, ordenação, responsividade e exportação de relatórios (PDF/CSV)
+2. **Escalabilidade:** cache para consultas frequentes e fila de processamento para análises
+3. **Rate-limiting:** proteção do endpoint público de ingestão contra abuso
+4. **Monitoramento:** integração com logging/observabilidade e métricas de desempenho
+5. **Frontend:** evoluir para um frontend desacoplado baseado em componentes (ex: React)
+
+## Licença
+
+Distribuído sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
