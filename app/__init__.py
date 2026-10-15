@@ -76,6 +76,9 @@ def register_blueprints(app: Flask) -> None:
     from app.routes.web import web as web_blueprint
     app.register_blueprint(web_blueprint)
 
+    from app.routes.health import health as health_blueprint
+    app.register_blueprint(health_blueprint)
+
     from app.auth import auth as auth_blueprint
     app.register_blueprint(auth_blueprint)
 
