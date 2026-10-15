@@ -57,6 +57,11 @@ def init_extensions(app: Flask) -> None:
     db.init_app(app)
     migrate.init_app(app, db)
 
+    # O Flask-Limiter lê RATELIMIT_STORAGE_URI e RATELIMIT_ENABLED do
+    # app.config automaticamente, então basta inicializá-lo.
+    from app.extensions import limiter
+    limiter.init_app(app)
+
 
 def register_blueprints(app: Flask) -> None:
     """
@@ -80,6 +85,19 @@ def register_blueprints(app: Flask) -> None:
     def inject_auth_flags():
         """Disponibiliza o estado da autenticação para os templates."""
         return {'auth_enabled': auth_enabled()}
+
+    @app.errorhandler(429)
+    def ratelimit_handler(error):
+        """Resposta JSON para quando o rate-limit é atingido."""
+        from flask import jsonify, request
+        description = getattr(error, 'description', 'rate limit exceeded')
+        # Rotas da API respondem JSON; a web herda o HTML default do Flask.
+        if request.path.startswith('/api'):
+            return jsonify({
+                'error': 'Too many requests',
+                'detail': str(description),
+            }), 429
+        return error
 
 
 def init_scheduler(app: Flask) -> None:
