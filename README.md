@@ -145,6 +145,26 @@ A aplicação estará disponível em `http://localhost:5000`.
 
 > **Nota de segurança:** por padrão, em desenvolvimento, o servidor roda com `debug=True` e faz bind em `0.0.0.0`. Em produção, use um servidor WSGI (ex: `gunicorn`), desligue o debug e defina `FLASK_ENV=production`.
 
+### Executando com Docker
+
+O projeto inclui um `Dockerfile` (gunicorn servindo `wsgi:app`) e um `docker-compose.yml` que sobe a aplicação junto de um PostgreSQL.
+
+```bash
+# A OPENAI_API_KEY e obrigatoria em producao (FLASK_ENV=production)
+export OPENAI_API_KEY=sua-chave   # no Windows: $env:OPENAI_API_KEY="sua-chave"
+docker compose up --build
+```
+
+A aplicação sobe em `http://localhost:5000` e o Postgres em `localhost:5432`. As variáveis de ambiente têm defaults no compose; sobrescreva via `.env` ou pelo shell.
+
+Na primeira execução, crie as tabelas no banco (o container `web` compartilha o código):
+
+```bash
+docker compose exec web flask db upgrade   # apos gerar as migracoes
+# ou, para um bootstrap rapido sem migracoes:
+docker compose exec web python -c "from app import create_app, db; app=create_app(); ctx=app.app_context(); ctx.push(); db.create_all()"
+```
+
 ## Endpoints da API
 
 ### Enviar Feedback
