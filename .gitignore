@@ -27,6 +27,8 @@ wheels/
 # Unit test / coverage reports
 htmlcov/
 .tox/
+.ruff_cache/
+.mypy_cache/
 .coverage
 .coverage.*
 .cache
