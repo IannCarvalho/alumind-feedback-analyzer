@@ -63,6 +63,10 @@ class Config:
     # OpenAI configuration
     OPENAI_API_KEY: Optional[str] = os.environ.get('OPENAI_API_KEY')
     OPENAI_MODEL: str = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+    # Timeout (segundos) e nº de retries da chamada à LLM. Evita que uma
+    # chamada travada à OpenAI segure o request indefinidamente.
+    OPENAI_TIMEOUT: int = get_env_int('OPENAI_TIMEOUT', 30)
+    OPENAI_MAX_RETRIES: int = get_env_int('OPENAI_MAX_RETRIES', 2)
 
     # Email configuration
     EMAIL_HOST: Optional[str] = os.environ.get('EMAIL_HOST')

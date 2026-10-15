@@ -69,6 +69,8 @@ class FeedbackAnalyzer:
             model_name=model_name,
             temperature=0.0,
             openai_api_key=api_key,
+            request_timeout=Config.OPENAI_TIMEOUT,
+            max_retries=Config.OPENAI_MAX_RETRIES,
             model_kwargs={"response_format": {"type": "json_object"}},
         )
 
@@ -105,7 +107,13 @@ class FeedbackAnalyzer:
         """)
 
         chain = prompt | self.llm
-        response = chain.invoke({"feedback": feedback_text})
+        try:
+            response = chain.invoke({"feedback": feedback_text})
+        except Exception as e:
+            # Timeout, erro de rede ou falha da API: a análise não é confiável,
+            # então devolve o resultado seguro em vez de derrubar o request.
+            logger.error(f"LLM call failed: {e}")
+            return _default_result()
 
         raw = self._extract_json(response.content)
         if raw is None:
