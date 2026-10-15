@@ -6,14 +6,15 @@ from typing import Type
 import logging
 
 from app.config import Config
+from app.logging_config import configure_logging
 
 # Initialize extensions
 db = SQLAlchemy()
 migrate = Migrate()
 scheduler = BackgroundScheduler()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging (formato consistente + nível via LOG_LEVEL)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 

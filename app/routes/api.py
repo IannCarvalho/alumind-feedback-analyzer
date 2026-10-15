@@ -1,4 +1,5 @@
 import uuid
+import logging
 from flask import Blueprint, request, jsonify, current_app
 from typing import Dict, Any
 from app import db
@@ -9,6 +10,7 @@ from app.services.feedback_service import FeedbackService
 
 api = Blueprint('api', __name__)
 feedback_analyzer = FeedbackAnalyzer()
+logger = logging.getLogger(__name__)
 
 
 def validate_feedback_request() -> Dict[str, Any]:
@@ -64,10 +66,14 @@ def analyze_feedback():
         return jsonify({'error': 'Feedback with this ID already exists'}), 409
 
     # Analyze feedback
+    logger.info('Analyzing feedback id=%s', feedback_id)
     analysis_result = feedback_analyzer.analyze_feedback(feedback_text)
     sentiment = analysis_result.get('sentiment', 'INCONCLUSIVO')
     is_spam = analysis_result.get('is_spam', False)
     requested_features = analysis_result.get('requested_features', [])
+    logger.info(
+        'Feedback id=%s analyzed: sentiment=%s is_spam=%s features=%d',
+        feedback_id, sentiment, is_spam, len(requested_features))
 
     # Create feedback in database
     feedback = Feedback(
