@@ -51,6 +51,10 @@ class Config:
     SECRET_KEY: str = os.environ.get('SECRET_KEY', 'default-secret-key')
     FLASK_ENV: str = os.environ.get('FLASK_ENV', 'development')
 
+    # Senha de acesso ao dashboard (rotas web). Se vazia, o dashboard
+    # fica aberto (comportamento histórico, útil em desenvolvimento).
+    DASHBOARD_PASSWORD: Optional[str] = os.environ.get('DASHBOARD_PASSWORD')
+
     # SQLAlchemy configuration
     SQLALCHEMY_DATABASE_URI: str = os.environ.get(
         'DATABASE_URL', 'sqlite:///feedlens.db')
