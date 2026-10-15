@@ -62,6 +62,12 @@ def init_extensions(app: Flask) -> None:
     from app.extensions import limiter
     limiter.init_app(app)
 
+    # CORS apenas nas rotas da API (/api/*). As rotas web/auth são de sessão
+    # de dashboard e não precisam de CORS. Origens configuráveis via env.
+    from app.extensions import cors
+    origins = app.config.get('CORS_ORIGINS', ['*'])
+    cors.init_app(app, resources={r'/api/*': {'origins': origins}})
+
 
 def register_blueprints(app: Flask) -> None:
     """
