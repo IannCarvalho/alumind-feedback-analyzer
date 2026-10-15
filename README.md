@@ -248,6 +248,16 @@ docker compose exec web python -c "from app import create_app, db; app=create_ap
 
 **Descrição:** Retorna um feedback específico pelo seu UUID. Responde `400` para um id malformado e `404` quando não existe.
 
+### Health Check
+
+**Endpoint:** `GET /health`
+
+**Descrição:** Probe de liveness/readiness para orquestradores (Docker, Render). Sem autenticação e sem rate-limit. Valida a conexão com o banco:
+- `200 OK` → `{"status": "ok", "database": "ok"}`
+- `503 Service Unavailable` → `{"status": "degraded", "database": "error"}` quando o banco está inacessível
+
+O `docker-compose.yml` usa este endpoint no `healthcheck` do serviço `web`.
+
 ## Interface Web
 
 ### Dashboard (`/` ou `/dashboard`)
