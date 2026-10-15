@@ -208,6 +208,8 @@ docker compose exec web python -c "from app import create_app, db; app=create_ap
 
 **Rate limiting:** este endpoint público é limitado (padrão `30 per minute` por IP) via [Flask-Limiter](https://flask-limiter.readthedocs.io/). Ao exceder o limite a resposta é `429 Too Many Requests` com corpo JSON. Configurável por `RATELIMIT_INGEST`, `RATELIMIT_ENABLED` e `RATELIMIT_STORAGE_URI` (use `redis://...` em produção com múltiplos workers; o default `memory://` serve a um único processo). Os endpoints `GET` não são limitados.
 
+**CORS:** as rotas `/api/*` têm CORS habilitado (via [Flask-CORS](https://flask-cors.readthedocs.io/)) para consumo por um frontend/cliente de outra origem. As origens permitidas são configuráveis por `CORS_ORIGINS` (lista separada por vírgula; default `*`). As rotas web do dashboard não expõem CORS.
+
 ### Listar Feedbacks
 
 **Endpoint:** `GET /api/feedbacks`

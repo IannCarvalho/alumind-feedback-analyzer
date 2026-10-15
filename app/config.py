@@ -85,6 +85,10 @@ class Config:
     RATELIMIT_INGEST: str = os.environ.get(
         'RATELIMIT_INGEST', '30 per minute')
 
+    # CORS: origens permitidas para /api/* (lista separada por vírgula).
+    # Default '*' porque a API é pública (ingestão + consulta de feedbacks).
+    CORS_ORIGINS: List[str] = get_env_list('CORS_ORIGINS', ['*'])
+
     @classmethod
     def is_development(cls) -> bool:
         """Check if running in development environment"""
