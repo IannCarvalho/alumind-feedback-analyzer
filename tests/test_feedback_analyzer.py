@@ -91,3 +91,21 @@ def test_bad_feature_shape_fails_validation_and_falls_back():
     result = _run_with_response(content)
     assert result["sentiment"] == "INCONCLUSIVO"
     assert result["requested_features"] == []
+
+
+def test_llm_call_exception_falls_back_safely():
+    # A timeout/network error from the LLM must not blow up the request: the
+    # analyzer swallows it and returns the canonical safe result.
+    analyzer = FeedbackAnalyzer()
+    analyzer.llm = MagicMock()
+    with patch(
+        "app.services.feedback_analyzer.ChatPromptTemplate"
+    ) as mock_prompt:
+        chain = MagicMock()
+        chain.invoke.side_effect = TimeoutError("request timed out")
+        mock_prompt.from_template.return_value.__or__.return_value = chain
+        result = analyzer.analyze_feedback("texto de feedback")
+
+    assert result["sentiment"] == "INCONCLUSIVO"
+    assert result["is_spam"] is False
+    assert result["requested_features"] == []
