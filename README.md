@@ -206,6 +206,48 @@ docker compose exec web python -c "from app import create_app, db; app=create_ap
 }
 ```
 
+### Listar Feedbacks
+
+**Endpoint:** `GET /api/feedbacks`
+
+**Descrição:** Lista os feedbacks analisados (spam excluído), do mais recente para o mais antigo, com paginação.
+
+**Parâmetros de query:**
+- `page` — número da página (padrão `1`)
+- `per_page` — itens por página (padrão `20`, máximo `100`)
+- `sentiment` — filtro opcional (`POSITIVO`, `NEGATIVO` ou `INCONCLUSIVO`)
+
+**Resposta de Sucesso (200 OK):**
+```json
+{
+  "items": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "feedback": "Gosto muito do app!",
+      "sentiment": "POSITIVO",
+      "is_spam": false,
+      "created_at": "2025-10-15T00:00:00+00:00",
+      "requested_features": []
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 1,
+    "pages": 1,
+    "has_next": false,
+    "has_prev": false
+  },
+  "sentiment": null
+}
+```
+
+### Consultar um Feedback
+
+**Endpoint:** `GET /api/feedbacks/<id>`
+
+**Descrição:** Retorna um feedback específico pelo seu UUID. Responde `400` para um id malformado e `404` quando não existe.
+
 ## Interface Web
 
 ### Dashboard (`/` ou `/dashboard`)
