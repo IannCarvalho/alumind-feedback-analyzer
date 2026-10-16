@@ -25,7 +25,7 @@ _import_lock = threading.Lock()
 class Completion:
     content: str
     model_ref: str          # 'provedor/modelo' que respondeu
-    source: str             # 'server' | 'request'
+    source: str             # 'server' | 'stored' | 'request'
     latency_ms: int
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
@@ -97,6 +97,7 @@ def complete(
     json_mode: bool = False,
     timeout: int = 30,
     max_retries: int = 2,
+    max_tokens: Optional[int] = None,
 ) -> Completion:
     """Executa a conversa no primeiro provedor da cadeia que responder."""
     if not chain:
@@ -107,6 +108,8 @@ def complete(
     for credential in chain:
         started = time.perf_counter()
         options: dict[str, Any] = {}
+        if max_tokens is not None:
+            options['max_tokens'] = max_tokens
         if json_mode:
             # JSON nativo na OpenAI e no Gemini; na Anthropic o LiteLLM ignora
             # (sem schema) e o prompt + o parser tolerante cobrem.

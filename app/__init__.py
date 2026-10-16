@@ -109,6 +109,9 @@ def register_blueprints(app: Flask) -> None:
     from app.routes.health import health as health_blueprint
     app.register_blueprint(health_blueprint)
 
+    from app.routes.settings_api import settings_api as settings_blueprint
+    app.register_blueprint(settings_blueprint, url_prefix='/api/settings')
+
     from app.auth import auth as auth_blueprint
     app.register_blueprint(auth_blueprint)
 
@@ -199,6 +202,9 @@ def create_app(config_class: Type[Config] = Config) -> Flask:
         from app.scheduling import register_cli
         register_cli(app)
 
+        from app.cli import register_vault_cli
+        register_vault_cli(app)
+
         logger.info(f'Application started in {config_class.FLASK_ENV} mode')
 
     except Exception as e:
@@ -208,3 +214,4 @@ def create_app(config_class: Type[Config] = Config) -> Flask:
     return app
 
 # Import models for Flask-Migrate to detect them
+from app.models import feedback, provider_credential  # noqa: E402,F401

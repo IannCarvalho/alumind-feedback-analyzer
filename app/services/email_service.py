@@ -169,10 +169,11 @@ def generate_email_content_llm(stats):
         return generate_email_content(stats)
 
     # Imported lazily: the static template path needs no LLM layer at all.
-    from app.llm import complete, llm_settings, server_chain
+    from app.llm import complete, llm_settings
+    from app.services.credential_store import operator_chain
 
     settings = llm_settings()
-    chain = server_chain(settings)
+    chain = operator_chain(settings)
     if not chain:
         logger.info("No LLM provider configured; using the static email template.")
         return generate_email_content(stats)

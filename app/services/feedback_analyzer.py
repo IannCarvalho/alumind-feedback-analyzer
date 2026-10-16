@@ -11,8 +11,8 @@ from app.llm import (
     LLMRequestError,
     complete,
     llm_settings,
-    server_chain,
 )
+from app.services.credential_store import operator_chain
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ class FeedbackAnalyzer:
             LLMRequestError: the request credential failed (BYOK only).
         """
         settings = llm_settings()
-        chain = [credential] if credential else server_chain(settings)
+        chain = [credential] if credential else operator_chain(settings)
 
         try:
             completion = complete(
