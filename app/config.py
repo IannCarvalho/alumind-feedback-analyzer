@@ -98,6 +98,13 @@ class Config:
         'LLM_MAX_RETRIES', get_env_int('OPENAI_MAX_RETRIES', 2))
     # Aceita BYOK por requisição (X-LLM-Provider / X-LLM-Api-Key / X-LLM-Model).
     BYOK_REQUEST_KEYS_ENABLED: bool = get_env_bool('BYOK_REQUEST_KEYS_ENABLED', True)
+    # Cofre de chaves (tela/API de provedores). Chave Fernet que cifra as
+    # chaves salvas no banco; use VÁRIAS separadas por vírgula para rotacionar
+    # (a primeira cifra, todas decifram). Vazia = cofre desligado.
+    FEEDLENS_ENCRYPTION_KEY: str = os.environ.get('FEEDLENS_ENCRYPTION_KEY', '')
+    # Teto de testes de chave (cada um é uma chamada paga ao provedor).
+    RATELIMIT_SETTINGS_TEST: str = os.environ.get(
+        'RATELIMIT_SETTINGS_TEST', '10 per minute')
 
     # Email configuration
     EMAIL_HOST: Optional[str] = os.environ.get('EMAIL_HOST')

@@ -23,6 +23,7 @@ from flask import current_app, has_app_context
 
 from app.llm.errors import ByokHeaderError
 from app.llm.providers import PROVIDERS, Provider, get_provider, parse_model_ref, validate_model_name
+from app.llm.vault import parse_fernet_keys
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class Credential:
     provider: Provider
     model: str
     api_key: str = field(repr=False)
-    source: str = 'server'  # 'server' (operador) | 'request' (BYOK do cliente)
+    source: str = 'server'  # 'request' (BYOK do cliente) | 'stored' (cofre) | 'server' (env)
 
     @property
     def model_ref(self) -> str:
@@ -112,6 +113,9 @@ def credential_from_headers(headers: Mapping[str, str],
 def validate_llm_config(config: Any) -> None:
     """Checagem de boot: LLM_MODELS malformado falha cedo; falta de chave só avisa."""
     settings = {name: getattr(config, name) for name in dir(config) if name.isupper()}
+    # Chave de cifra do cofre malformada derruba o boot (em vez de falhar só
+    # ao salvar a primeira chave). Ausente = cofre desligado, sem aviso.
+    parse_fernet_keys(settings.get('FEEDLENS_ENCRYPTION_KEY'))
     try:
         chain = server_chain(settings)
     except ValueError as e:

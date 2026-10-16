@@ -309,6 +309,39 @@ curl -X POST https://seu-host/api/feedbacks \
 
 O `docker-compose.yml` usa este endpoint no `healthcheck` do serviço `web`.
 
+### Chaves de Provedor (cofre)
+
+Além das variáveis de ambiente e do BYOK por requisição, o operador pode salvar chaves no banco e **trocar provedor principal e reservas sem redeploy**. A cadeia usada na análise é:
+
+1. headers `X-LLM-*` da requisição (vencem tudo e usam só a chave do cliente);
+2. chaves salvas e habilitadas, por `priority` (1 = principal);
+3. chaves do ambiente (`LLM_MODELS`), para o que não estiver salvo.
+
+Se a mesma combinação provedor/modelo existe nas duas últimas, a chave salva vale. A mudança é imediata: cada análise lê a cadeia na hora.
+
+**Como ligar:** defina `FEEDLENS_ENCRYPTION_KEY` (chave Fernet, **separada** da `SECRET_KEY`) e `DASHBOARD_PASSWORD`, e rode `flask db upgrade`:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Sem `FEEDLENS_ENCRYPTION_KEY` o cofre fica desligado (nada é gravado em claro) e sem `DASHBOARD_PASSWORD` a API recusa tudo (`403`), porque um painel aberto não pode cadastrar chaves pagas. Uma `FEEDLENS_ENCRYPTION_KEY` malformada impede o app de subir. Se a chave de cifra for perdida ou trocada sem rotação, as chaves salvas ficam ilegíveis: são ignoradas (com aviso no log) e é preciso cadastrá-las de novo.
+
+Todas as rotas usam o cookie de sessão do painel (faça login em `/login`); as que alteram estado exigem o header `X-CSRF-Token` com o valor de `csrf_token` devolvido pelo `GET`. A chave só entra por `POST`/`PATCH` e **nunca volta**: as respostas trazem só `key_hint` (`...a1b2`).
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/settings/providers` | Catálogo, `environment_chain` (sem chaves), chaves salvas e `csrf_token` |
+| `POST /api/settings/providers` | Salva `{provider, api_key, model?, priority?, enabled?, verify?}` |
+| `PATCH /api/settings/providers/<id>` | Altera `enabled`, `priority`, `model` ou troca `api_key` |
+| `DELETE /api/settings/providers/<id>` | Remove |
+| `POST /api/settings/providers/reorder` | `{"ids": [...]}` define a ordem da cadeia (o resto vai depois) |
+| `POST /api/settings/providers/<id>/test` | Testa com 1 chamada mínima e registra `last_verified_at` / `last_error_kind` |
+
+Ao salvar ou trocar uma chave, o app a testa antes (`verify`, padrão `true`): se o provedor a **recusar** a resposta é `422 llm_auth_failed` e nada é gravado; falhas passageiras (cota, timeout) gravam a chave com `last_error_kind`. Erros: `400` (entrada inválida), `403 csrf`, `404`, `409` (`duplicate`: mesmo provedor/modelo, ou `limit_reached`: até 20 chaves) e `503 vault_disabled`. Cada teste é uma chamada paga ao provedor, por isso `RATELIMIT_SETTINGS_TEST` (padrão `10 per minute`).
+
+**Rotação da chave de cifra:** ponha a nova antes da antiga (`FEEDLENS_ENCRYPTION_KEY="nova,antiga"`), reinicie, rode `flask rotate-llm-keys` e depois remova a antiga da variável.
+
 ## Interface Web
 
 ### Dashboard (`/` ou `/dashboard`)
@@ -372,9 +405,10 @@ O SMTP usa STARTTLS com certificado verificado e `EMAIL_TIMEOUT` (padrão 30s). 
 A camada `app/llm/` fala com os modelos via [LiteLLM](https://docs.litellm.ai/) e decide, a cada chamada, **de onde vem a chave**:
 
 1. **BYOK por requisição** (headers `X-LLM-*`): usa só a chave do cliente.
-2. **Chaves do servidor** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`): `LLM_MODELS` define a cadeia `provedor/modelo`, principal primeiro e reservas depois (ex.: `anthropic/claude-haiku-4-5,openai/gpt-4o-mini`). Sem `LLM_MODELS`, todo provedor com chave entra, no modelo padrão, na ordem OpenAI → Anthropic → Gemini.
+2. **Chaves salvas no cofre** (opcional, veja [Chaves de Provedor](#chaves-de-provedor-cofre)): cifradas no banco, na ordem de `priority`, editáveis sem redeploy.
+3. **Chaves do servidor** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`): `LLM_MODELS` define a cadeia `provedor/modelo`, principal primeiro e reservas depois (ex.: `anthropic/claude-haiku-4-5,openai/gpt-4o-mini`). Sem `LLM_MODELS`, todo provedor com chave entra, no modelo padrão, na ordem OpenAI → Anthropic → Gemini.
 
-Se o principal falha (timeout, cota, chave revogada, indisponibilidade), a análise segue para o próximo da cadeia. Trocar de provedor é mudar a ordem em `LLM_MODELS`; nenhuma chave é obrigatória para o app subir.
+Se o principal falha (timeout, cota, chave revogada, indisponibilidade), a análise segue para o próximo da cadeia. Trocar de provedor é mudar a ordem em `LLM_MODELS` (ou reordenar as chaves salvas); nenhuma chave é obrigatória para o app subir.
 
 | Provedor | Variável | Modelo padrão |
 |---|---|---|
@@ -385,7 +419,7 @@ Se o principal falha (timeout, cota, chave revogada, indisponibilidade), a anál
 Cuidados de segurança:
 
 - **Allowlist de provedores:** só os três acima. Prefixos como `bedrock/` ou `ollama/` usariam credenciais ou hosts internos do servidor e são recusados.
-- **A chave não vaza:** não é gravada, não aparece em `repr` e é removida das mensagens de erro e dos logs; o log do próprio LiteLLM fica em `WARNING` para não registrar o texto dos feedbacks.
+- **A chave não vaza:** não é gravada (no BYOK por requisição), não aparece em `repr` e é removida das mensagens de erro e dos logs; as chaves salvas ficam cifradas (Fernet) e a API nunca as devolve; o log do próprio LiteLLM fica em `WARNING` para não registrar o texto dos feedbacks.
 - **Prompt injection:** as instruções vão na mensagem de sistema e o feedback vai delimitado, como dado. Códigos de feature são normalizados (`EDICAO_DE_PERFIL`, até 50 caracteres, no máximo 10 por feedback), e o HTML gerado para o e-mail passa por sanitização: só tags de formatação, sem links, imagens ou atributos.
 - **Custo e latência:** cada chamada loga provedor, latência, tokens e custo estimado. O LiteLLM é importado sob demanda (e aquecido em segundo plano no `wsgi.py`), então boot, CLI e testes não pagam seu import.
 
