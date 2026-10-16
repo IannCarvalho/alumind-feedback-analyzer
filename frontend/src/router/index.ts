@@ -21,6 +21,18 @@ const router = createRouter({
       meta: { title: 'Provedores de IA' },
     },
     {
+      path: '/feedbacks',
+      name: 'feedbacks',
+      component: () => import('@/views/FeedbackListView.vue'),
+      meta: { title: 'Feedbacks' },
+    },
+    {
+      path: '/feedbacks/:id',
+      name: 'feedback-detail',
+      component: () => import('@/views/FeedbackDetailView.vue'),
+      meta: { title: 'Detalhe do feedback' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue'),
