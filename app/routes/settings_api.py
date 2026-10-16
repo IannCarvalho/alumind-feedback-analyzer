@@ -11,16 +11,15 @@ da mesma origem do painel e usa o MESMO cookie de sessão do login:
 - a chave só entra pelo POST/PATCH e nunca sai: as respostas trazem apenas
   ``key_hint`` (``...a1b2``).
 """
-import hmac
 import logging
-import secrets
 from datetime import datetime, timezone
 from functools import wraps
 from typing import Optional
 
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request
 
 from app.auth import auth_enabled, is_authenticated
+from app.csrf import CSRF_HEADER, csrf_is_valid, csrf_token
 from app.extensions import limiter
 from app.llm import (
     PROVIDERS,
@@ -38,21 +37,9 @@ from app.services import credential_store as store
 settings_api = Blueprint('settings_api', __name__)
 logger = logging.getLogger(__name__)
 
-CSRF_SESSION_KEY = 'csrf_token'
-CSRF_HEADER = 'X-CSRF-Token'
-SAFE_METHODS = {'GET', 'HEAD', 'OPTIONS'}
-
 
 def _error(message: str, status: int, code: str, **extra):
     return jsonify({'error': message, 'code': code, **extra}), status
-
-
-def _csrf_token() -> str:
-    token = session.get(CSRF_SESSION_KEY)
-    if not token:
-        token = secrets.token_urlsafe(32)
-        session[CSRF_SESSION_KEY] = token
-    return token
 
 
 def guarded(view):
@@ -65,11 +52,8 @@ def guarded(view):
                 403, 'auth_not_configured')
         if not is_authenticated():
             return _error('Faça login no painel.', 401, 'unauthenticated')
-        if request.method not in SAFE_METHODS:
-            expected = session.get(CSRF_SESSION_KEY) or ''
-            sent = request.headers.get(CSRF_HEADER, '')
-            if not expected or not hmac.compare_digest(sent.encode(), expected.encode()):
-                return _error(f'Header {CSRF_HEADER} ausente ou inválido.', 403, 'csrf')
+        if not csrf_is_valid():
+            return _error(f'Header {CSRF_HEADER} ausente ou inválido.', 403, 'csrf')
         return view(*args, **kwargs)
     return wrapped
 
@@ -146,7 +130,7 @@ def list_providers():
     settings = llm_settings()
     return jsonify({
         'vault_enabled': vault_enabled,
-        'csrf_token': _csrf_token(),
+        'csrf_token': csrf_token(),
         'catalog': [
             {
                 'id': provider.id,

@@ -177,8 +177,16 @@ Proteções do login e da sessão:
 - **Sessão com validade:** o login expira após `SESSION_LIFETIME_HOURS` (padrão 12h).
 - **Cookie:** `HttpOnly`, `SameSite=Lax` e `Secure` (padrão em produção; `SESSION_COOKIE_SECURE=false` só para HTTP local).
 - **Redirect pós-login:** o parâmetro `next` só aceita caminhos locais (`//host`, `/\host` e esquemas externos são descartados).
+- **CSRF:** todo `POST` do painel (login e logout) exige o campo `csrf_token`, e a API de configuração exige o header `X-CSRF-Token`. É um token aleatório por sessão, comparado em tempo constante, que é trocado no login (que também descarta a sessão anterior, contra fixação de sessão). Isso fecha o *login CSRF* e complementa o `SameSite=Lax`. Formulários novos devem incluir `<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">`.
 
-A API (`/api/...`) **não** é afetada por essa autenticação: ela tem seu próprio contrato de ingestão de feedbacks.
+**API de leitura:** `GET /api/feedbacks` e `GET /api/feedbacks/<id>` expõem o texto de todos os feedbacks, então seguem a mesma regra do painel. Com `DASHBOARD_PASSWORD` ou `API_READ_TOKEN` definidos, a leitura exige uma credencial; sem nenhum dos dois ela continua aberta (dev), com aviso no log em produção:
+
+- **Sessão do painel:** para um frontend da mesma origem (o cookie de login vale).
+- **`Authorization: Bearer <API_READ_TOKEN>`:** para clientes servidor-a-servidor. Mínimo de 24 caracteres (`python -c "import secrets; print(secrets.token_urlsafe(32))"`). Não vá no JavaScript de um site público: quem abre o site lê o token. O token não é aceito na query string, para não parar em log nem em histórico.
+
+Sem credencial a resposta é `401` JSON com `WWW-Authenticate: Bearer`. O `POST /api/feedbacks` (ingestão) e o `/health` continuam públicos.
+
+A API (`/api/...`) **não** é afetada por essa autenticação de formulário: o `POST /api/feedbacks` tem o próprio contrato de ingestão. A leitura (`GET`) tem a regra descrita abaixo.
 
 ### Executando com Docker
 
@@ -261,7 +269,7 @@ curl -X POST https://seu-host/api/feedbacks \
 
 **Endpoint:** `GET /api/feedbacks`
 
-**Descrição:** Lista os feedbacks analisados (spam excluído), do mais recente para o mais antigo, com paginação.
+**Descrição:** Lista os feedbacks analisados (spam excluído), do mais recente para o mais antigo, com paginação. **Exige credencial** quando `DASHBOARD_PASSWORD` ou `API_READ_TOKEN` estão definidos (veja *API de leitura*, acima): `Authorization: Bearer <API_READ_TOKEN>` ou a sessão do painel; senão, `401`.
 
 **Parâmetros de query:**
 - `page` — número da página (padrão `1`)
@@ -297,7 +305,7 @@ curl -X POST https://seu-host/api/feedbacks \
 
 **Endpoint:** `GET /api/feedbacks/<id>`
 
-**Descrição:** Retorna um feedback específico pelo seu UUID. Responde `400` para um id malformado e `404` quando não existe.
+**Descrição:** Retorna um feedback específico pelo seu UUID. Mesma autenticação da listagem. Responde `400` para um id malformado e `404` quando não existe.
 
 ### Health Check
 

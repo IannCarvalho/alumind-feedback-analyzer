@@ -25,6 +25,7 @@ KNOWN_PLACEHOLDER_SECRETS = frozenset({
     'sua_chave_secreta',
 })
 MIN_SECRET_KEY_LENGTH = 32
+MIN_API_TOKEN_LENGTH = 24
 
 
 def is_insecure_secret_key(secret_key: str | None) -> bool:
@@ -70,6 +71,18 @@ def validate_config(config: Type[Config]) -> None:
             'DASHBOARD_PASSWORD is not set. The dashboard is publicly '
             'accessible without authentication.')
 
+    # Token de leitura da API: curto demais é força-bruta viável (o limiter
+    # só cobre POST), então exige comprimento mínimo quando definido.
+    api_token = config.API_READ_TOKEN
+    if api_token and len(api_token) < MIN_API_TOKEN_LENGTH:
+        raise ValueError(
+            f'API_READ_TOKEN muito curto: use pelo menos {MIN_API_TOKEN_LENGTH} '
+            'caracteres (ex.: python -c "import secrets; print(secrets.token_urlsafe(32))").')
+    if config.is_production() and not (config.DASHBOARD_PASSWORD or api_token):
+        logger.warning(
+            'Nem DASHBOARD_PASSWORD nem API_READ_TOKEN estão definidos: '
+            'GET /api/feedbacks está público.')
+
 
 def init_extensions(app: Flask) -> None:
     """
@@ -79,6 +92,8 @@ def init_extensions(app: Flask) -> None:
         app: Flask application instance
     """
     db.init_app(app)
+    from app.csrf import init_csrf
+    init_csrf(app)
     migrate.init_app(app, db)
 
     # O Flask-Limiter lê RATELIMIT_STORAGE_URI e RATELIMIT_ENABLED do

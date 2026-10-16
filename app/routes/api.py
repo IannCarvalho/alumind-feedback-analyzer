@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify, current_app
 from typing import Dict, Any
 from sqlalchemy.exc import IntegrityError
 from app import db
+from app.auth import api_read_required
 from app.extensions import limiter
 from app.models.feedback import FEATURE_CODE_MAX_LENGTH, Feedback, RequestedFeature
 from app.services.feedback_analyzer import FeedbackAnalyzer
@@ -164,6 +165,7 @@ def analyze_feedback():
 
 
 @api.route('/feedbacks', methods=['GET'])
+@api_read_required
 def list_feedbacks():
     """
     List analyzed feedbacks (spam excluded), newest first.
@@ -205,6 +207,7 @@ def list_feedbacks():
 
 
 @api.route('/feedbacks/<feedback_id>', methods=['GET'])
+@api_read_required
 def get_feedback(feedback_id):
     """
     Fetch a single feedback by its UUID.

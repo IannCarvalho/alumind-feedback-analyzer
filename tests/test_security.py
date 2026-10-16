@@ -6,12 +6,15 @@ SECRET_KEY placeholder aceita em produção, 500s de entrada na API e a
 corrida de id duplicado.
 """
 from unittest.mock import patch
+from urllib.parse import urlencode
 
 import pytest
 
 from app import create_app, db, validate_config
 from app.config import Config
 from app.extensions import limiter
+
+from tests.helpers import csrf_token, login, post_form
 
 OK_ANALYSIS = {"sentiment": "POSITIVO", "is_spam": False, "requested_features": []}
 FEEDBACK_ID = "4042f20a-45f4-4647-8050-139ac16f610b"
@@ -46,16 +49,15 @@ def secured_client():
     "dashboard",
 ])
 def test_login_never_redirects_off_site(secured_client, target):
-    resp = secured_client.post(
-        "/login", query_string={"next": target}, data={"password": "segredo"})
+    resp = post_form(
+        secured_client, f"/login?{urlencode({'next': target})}", {"password": "segredo"})
     assert resp.status_code == 302
     assert resp.headers["Location"] == "/dashboard"
 
 
 def test_login_keeps_local_next_with_query(secured_client):
-    resp = secured_client.post(
-        "/login", query_string={"next": "/feedbacks?page=2"},
-        data={"password": "segredo"})
+    resp = post_form(
+        secured_client, "/login?next=/feedbacks%3Fpage%3D2", {"password": "segredo"})
     assert resp.headers["Location"] == "/feedbacks?page=2"
 
 
@@ -67,8 +69,8 @@ def test_non_ascii_password_does_not_crash():
     with application.app_context():
         db.create_all()
         client = application.test_client()
-        wrong = client.post("/login", data={"password": "não-é"})
-        right = client.post("/login", data={"password": "senha-ção"})
+        wrong = login(client, "não-é")
+        right = login(client, "senha-ção")
         db.drop_all()
     assert wrong.status_code == 200
     assert "Senha incorreta" in wrong.get_data(as_text=True)
@@ -91,11 +93,12 @@ def test_login_post_is_rate_limited():
     with application.app_context():
         limiter.reset()
         client = application.test_client()
+        token = csrf_token(client)
         statuses = [
-            client.post("/login", data={"password": "errada"}).status_code
+            client.post("/login", data={"password": "errada", "csrf_token": token}).status_code
             for _ in range(3)
         ]
-        blocked = client.post("/login", data={"password": "errada"})
+        blocked = client.post("/login", data={"password": "errada", "csrf_token": token})
         # O GET da tela de login não consome o limite do POST.
         page = client.get("/login")
         limiter.reset()
@@ -111,7 +114,9 @@ def test_session_cookie_flags_and_expiry():
     application = _secured_app(SESSION_COOKIE_SECURE=True)
     with application.app_context():
         db.create_all()
-        resp = application.test_client().post("/login", data={"password": "segredo"})
+        client = application.test_client()
+        client.environ_base["wsgi.url_scheme"] = "https"  # cookie Secure só volta em HTTPS
+        resp = login(client, "segredo")
         db.drop_all()
     cookie = resp.headers["Set-Cookie"]
     assert "HttpOnly" in cookie
