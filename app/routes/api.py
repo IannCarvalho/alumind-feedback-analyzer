@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from app import db
 from app.auth import api_read_required
 from app.extensions import limiter
+from app.ingest_auth import ingest_key_required
 from app.models.feedback import FEATURE_CODE_MAX_LENGTH, Feedback, RequestedFeature
 from app.services.feedback_analyzer import FeedbackAnalyzer
 from app.services.feedback_service import FeedbackService
@@ -68,6 +69,7 @@ def validate_feedback_request() -> Dict[str, Any]:
 
 @api.route('/feedbacks', methods=['POST'])
 @limiter.limit(lambda: current_app.config.get('RATELIMIT_INGEST', '30 per minute'))
+@ingest_key_required
 def analyze_feedback():
     """
     Endpoint to receive and analyze feedback
