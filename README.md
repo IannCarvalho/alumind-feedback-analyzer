@@ -303,6 +303,16 @@ A aplicação envia automaticamente um resumo semanal dos feedbacks para os stak
 
 O envio é agendado via APScheduler. O texto do resumo é gerado por LLM, com fallback para um template estático quando a geração falha ou não há chave configurada.
 
+### Agendamento do resumo
+
+O resumo sai toda segunda-feira às 8h (fuso `SCHEDULER_TIMEZONE`, padrão `America/Sao_Paulo`) e exige **um único agendador por deploy**, senão cada processo envia o seu e-mail:
+
+- **Processo único** (padrão do container: 1 worker do gunicorn com threads, via `gunicorn.conf.py`): `SCHEDULER_ENABLED=true` no próprio app. O `docker-compose.yml` já liga.
+- **Vários workers ou réplicas:** `SCHEDULER_ENABLED=false` no web e um processo dedicado com `python -m app.scheduling`.
+- **Sob demanda ou por cron externo** (ex.: Render Cron Job): `flask send-weekly-summary` (no container: `docker compose exec web flask --app wsgi send-weekly-summary`).
+
+O SMTP usa STARTTLS com certificado verificado e `EMAIL_TIMEOUT` (padrão 30s). `APP_BASE_URL` define o link do painel no e-mail. Sem configuração de e-mail o app sobe normalmente (inclusive em produção) e só registra um aviso.
+
 ## Considerações de Desenvolvimento
 
 ### Padrões Arquiteturais

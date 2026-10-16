@@ -39,7 +39,8 @@ def validate_config(config: Type[Config]) -> None:
 
     # Check email configuration if in production
     if config.is_production() and not config.has_email_config():
-        raise ValueError('Email configuration is required in production')
+        logger.warning(
+            'Email is not configured: the weekly summary will not be sent.')
 
     # Warn when the dashboard is left open in production
     if config.is_production() and not config.DASHBOARD_PASSWORD:
@@ -114,18 +115,24 @@ def init_scheduler(app: Flask) -> None:
     """
     Initialize background task scheduler
 
+    Opt-in (``SCHEDULER_ENABLED``): só um processo por deploy deve agendar o
+    resumo semanal, senão cada worker envia o seu e-mail. Veja app/scheduling.py.
+
     Args:
         app: Flask application instance
     """
-    with app.app_context():
-        if not scheduler.running:
-            from app.services.email_service import schedule_weekly_summary
-            try:
-                schedule_weekly_summary(scheduler)
-                scheduler.start()
-                logger.info('Background scheduler started successfully')
-            except Exception as e:
-                logger.error(f'Failed to start scheduler: {str(e)}')
+    if not app.config.get('SCHEDULER_ENABLED'):
+        logger.info('Background scheduler disabled (SCHEDULER_ENABLED=false)')
+        return
+
+    if not scheduler.running:
+        from app.scheduling import schedule_weekly_summary
+        try:
+            schedule_weekly_summary(scheduler, app)
+            scheduler.start()
+            logger.info('Background scheduler started successfully')
+        except Exception as e:
+            logger.error(f'Failed to start scheduler: {str(e)}')
 
 
 def create_app(config_class: Type[Config] = Config) -> Flask:
@@ -154,6 +161,9 @@ def create_app(config_class: Type[Config] = Config) -> Flask:
         init_extensions(app)
         register_blueprints(app)
         init_scheduler(app)
+
+        from app.scheduling import register_cli
+        register_cli(app)
 
         logger.info(f'Application started in {config_class.FLASK_ENV} mode')
 

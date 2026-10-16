@@ -31,6 +31,10 @@ services:
       EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
       EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
       EMAIL_RECIPIENTS: ${EMAIL_RECIPIENTS:-}
+      # Container de processo unico (1 worker gunicorn): pode agendar o resumo.
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+      SCHEDULER_TIMEZONE: ${SCHEDULER_TIMEZONE:-America/Sao_Paulo}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5000}
     depends_on:
       db:
         condition: service_healthy

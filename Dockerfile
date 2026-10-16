@@ -20,5 +20,6 @@ COPY . .
 
 EXPOSE 5000
 
-# gunicorn servindo a app factory via wsgi:app
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "wsgi:app"]
+# gunicorn servindo a app factory via wsgi:app; bind, workers e threads vêm
+# do gunicorn.conf.py (1 worker gthread, respeitando PORT/WEB_CONCURRENCY)
+CMD ["gunicorn", "wsgi:app"]

@@ -1,5 +1,7 @@
+import html
 import logging
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta, timezone
@@ -12,9 +14,15 @@ from app.config import Config
 logger = logging.getLogger(__name__)
 
 
+REASON_SEPARATOR = ' | '
+
+
 def generate_weekly_summary():
     """
     Generates a summary of feedback from the last week
+
+    Contagens e motivos saem de agregações no banco (GROUP BY), em vez de
+    carregar cada feedback da semana para a memória só para contá-los.
 
     Returns:
         dict: Dictionary with feedback statistics and summary
@@ -22,50 +30,47 @@ def generate_weekly_summary():
     # Define the last week period
     end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=7)
-
-    # Query feedback from last week that isn't spam
-    weekly_feedbacks = Feedback.query.filter(
+    in_window = (
         Feedback.created_at.between(start_date, end_date),
-        Feedback.is_spam == False
-    ).all()
+        Feedback.is_spam == False,
+    )
+
+    sentiment_rows = db.session.query(
+        Feedback.sentiment, func.count(Feedback.id)
+    ).filter(*in_window).group_by(Feedback.sentiment).all()
+    counts = {sentiment: count for sentiment, count in sentiment_rows}
+    total_feedbacks = sum(counts.values())
 
     # If no feedback, return empty summary
-    if not weekly_feedbacks:
+    if total_feedbacks == 0:
         return {
             'total_feedbacks': 0,
+            'positive_count': 0,
+            'negative_count': 0,
             'positive_percentage': 0,
             'negative_percentage': 0,
             'top_features': []
         }
 
-    # Calculate statistics
-    total_feedbacks = len(weekly_feedbacks)
-    positive_feedbacks = sum(
-        1 for f in weekly_feedbacks if f.sentiment == 'POSITIVO')
-    negative_feedbacks = sum(
-        1 for f in weekly_feedbacks if f.sentiment == 'NEGATIVO')
+    positive_count = counts.get('POSITIVO', 0)
+    negative_count = counts.get('NEGATIVO', 0)
 
-    # Calculate percentages
-    positive_percentage = (positive_feedbacks /
-                           total_feedbacks) * 100 if total_feedbacks > 0 else 0
-    negative_percentage = (negative_feedbacks /
-                           total_feedbacks) * 100 if total_feedbacks > 0 else 0
-
-    # Find most requested features
+    # Most requested features. aggregate_strings vira string_agg no Postgres
+    # e group_concat no SQLite, então a mesma query roda nos dois bancos.
+    feature_count = func.count(RequestedFeature.id)
     feature_query = db.session.query(
         RequestedFeature.code,
-        func.count(RequestedFeature.code).label('count'),
-        func.string_agg(RequestedFeature.reason, ' | ').label('reasons')
-    ).join(Feedback).filter(
-        Feedback.created_at.between(start_date, end_date),
-        Feedback.is_spam == False
-    ).group_by(RequestedFeature.code).order_by(func.count(RequestedFeature.code).desc()).limit(5)
+        feature_count.label('count'),
+        func.aggregate_strings(RequestedFeature.reason, REASON_SEPARATOR).label('reasons')
+    ).join(Feedback).filter(*in_window).group_by(
+        RequestedFeature.code
+    ).order_by(feature_count.desc(), RequestedFeature.code).limit(5)
 
     top_features = [
         {
             'code': feature.code,
             'count': feature.count,
-            'reasons': feature.reasons.split(' | ')
+            'reasons': (feature.reasons or '').split(REASON_SEPARATOR)
         }
         for feature in feature_query
     ]
@@ -73,8 +78,10 @@ def generate_weekly_summary():
     # Return statistics
     return {
         'total_feedbacks': total_feedbacks,
-        'positive_percentage': positive_percentage,
-        'negative_percentage': negative_percentage,
+        'positive_count': positive_count,
+        'negative_count': negative_count,
+        'positive_percentage': positive_count / total_feedbacks * 100,
+        'negative_percentage': negative_count / total_feedbacks * 100,
         'top_features': top_features
     }
 
@@ -93,37 +100,50 @@ def generate_email_content(stats):
     if stats['total_feedbacks'] == 0:
         return "<p>Nenhum feedback recebido essa semana.</p>"
 
-    # Create features section
+    total = stats['total_feedbacks']
+    positive_count = stats.get(
+        'positive_count', round(total * stats['positive_percentage'] / 100))
+    negative_count = stats.get(
+        'negative_count', round(total * stats['negative_percentage'] / 100))
+
+    # Create features section. O código vem da saída da LLM, que lê texto do
+    # usuário: escapar impede que um feedback injete HTML no e-mail.
     features_html = ""
     if stats['top_features']:
         features_html = "<ul>"
         for feature in stats['top_features']:
-            features_html += f"<li><strong>{feature['code']}</strong> (Mencionada {feature['count']} vezes)</li>"
+            code = html.escape(str(feature['code']))
+            features_html += f"<li><strong>{code}</strong> (Mencionada {feature['count']} vezes)</li>"
         features_html += "</ul>"
     else:
         features_html = "<p>Nenhuma funcionalidade foi solicitada com frequência esta semana.</p>"
+
+    dashboard_html = ""
+    if Config.APP_BASE_URL:
+        dashboard_url = html.escape(f"{Config.APP_BASE_URL}/dashboard", quote=True)
+        dashboard_html = f'<p>Para acessar o dashboard completo, visite <a href="{dashboard_url}">o painel</a>.</p>'
 
     # Prepare complete email
     email_content = f"""
     <html>
     <body>
         <h2>Resumo Semanal de Feedback - FeedLens</h2>
-        
+
         <p>Prezada equipe,</p>
-        
+
         <p>Este é o resumo automático dos feedbacks recebidos na última semana.</p>
-        
+
         <h3>Estatísticas Gerais</h3>
-        <p>Total de feedbacks: <strong>{stats['total_feedbacks']}</strong></p>
-        <p>Feedbacks positivos: <strong>{stats['positive_percentage']:.1f}%</strong> ({stats['total_feedbacks'] * stats['positive_percentage'] / 100:.0f} feedbacks)</p>
-        <p>Feedbacks negativos: <strong>{stats['negative_percentage']:.1f}%</strong> ({stats['total_feedbacks'] * stats['negative_percentage'] / 100:.0f} feedbacks)</p>
-        
+        <p>Total de feedbacks: <strong>{total}</strong></p>
+        <p>Feedbacks positivos: <strong>{stats['positive_percentage']:.1f}%</strong> ({positive_count} feedbacks)</p>
+        <p>Feedbacks negativos: <strong>{stats['negative_percentage']:.1f}%</strong> ({negative_count} feedbacks)</p>
+
         <h3>Funcionalidades Mais Solicitadas</h3>
         {features_html}
-        
+
         <hr>
         <p>Este e-mail foi gerado automaticamente pelo FeedLens.</p>
-        <p>Para acessar o dashboard completo, visite <a href="#">o painel de administração</a>.</p>
+        {dashboard_html}
     </body>
     </html>
     """
@@ -218,7 +238,7 @@ def send_weekly_summary_email():
 
     # Create message
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"Weekly Feedback Summary - FeedLens ({datetime.now().strftime('%Y-%m-%d')})"
+    msg['Subject'] = f"Resumo semanal de feedbacks - FeedLens ({datetime.now().strftime('%Y-%m-%d')})"
     msg['From'] = Config.EMAIL_USER
     msg['To'] = ", ".join(Config.EMAIL_RECIPIENTS)
 
@@ -226,16 +246,19 @@ def send_weekly_summary_email():
     msg.attach(MIMEText(email_content, 'html'))
 
     try:
-        # Connect to SMTP server
-        server = smtplib.SMTP(Config.EMAIL_HOST, Config.EMAIL_PORT)
-        if Config.EMAIL_USE_TLS:
-            server.starttls()
-        server.login(Config.EMAIL_USER, Config.EMAIL_PASSWORD)
+        # timeout: um servidor SMTP mudo não pode travar o job para sempre.
+        # O 'with' fecha a conexão (QUIT) também quando algo falha no meio.
+        with smtplib.SMTP(Config.EMAIL_HOST, Config.EMAIL_PORT,
+                          timeout=Config.EMAIL_TIMEOUT) as server:
+            if Config.EMAIL_USE_TLS:
+                # Sem context, o starttls() do smtplib NÃO valida o
+                # certificado do servidor (MITM capturaria a senha SMTP).
+                server.starttls(context=ssl.create_default_context())
+            server.login(Config.EMAIL_USER, Config.EMAIL_PASSWORD)
 
-        # Send email
-        server.sendmail(Config.EMAIL_USER,
-                        Config.EMAIL_RECIPIENTS, msg.as_string())
-        server.quit()
+            # Send email
+            server.sendmail(Config.EMAIL_USER,
+                            Config.EMAIL_RECIPIENTS, msg.as_string())
 
         logger.info(
             f"Email sent successfully to {', '.join(Config.EMAIL_RECIPIENTS)}")
@@ -243,23 +266,3 @@ def send_weekly_summary_email():
     except Exception as e:
         logger.error(f"Error sending email: {e}")
         return False
-
-
-def schedule_weekly_summary(scheduler):
-    """
-    Schedules weekly summary sending
-
-    Args:
-        scheduler: The task scheduler
-    """
-    # Schedule for every Monday at 8am
-    scheduler.add_job(
-        send_weekly_summary_email,
-        'cron',
-        day_of_week='mon',
-        hour=8,
-        minute=0,
-        id='weekly_summary_email'
-    )
-
-    logger.info("Weekly summary sending scheduled for every Monday at 8am")
