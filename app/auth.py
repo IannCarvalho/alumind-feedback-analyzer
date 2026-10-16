@@ -13,6 +13,7 @@ fica DESLIGADA e o dashboard permanece aberto (comportamento histórico,
 """
 from functools import wraps
 from hmac import compare_digest
+from urllib.parse import urlsplit
 
 from flask import (
     Blueprint,
@@ -25,10 +26,33 @@ from flask import (
     url_for,
 )
 
+from app.extensions import limiter
+
 auth = Blueprint('auth', __name__)
 
 # Chave usada no cookie de sessão para marcar o usuário autenticado.
 SESSION_KEY = 'dashboard_authenticated'
+
+
+def safe_next_url(target: str | None) -> str:
+    """Devolve ``target`` apenas se for um caminho LOCAL; senão, o dashboard.
+
+    Checar só ``startswith('/')`` não basta: ``//evil.com`` é uma URL
+    relativa ao protocolo (host externo) e os navegadores tratam ``\\`` como
+    ``/`` e descartam tab/quebra de linha, então ``/\\evil.com`` e
+    ``/\\t/evil.com`` também viram ``//evil.com``.
+    """
+    fallback = url_for('web.dashboard')
+    if not target:
+        return fallback
+    if '\\' in target or any(ord(char) < 32 for char in target):
+        return fallback
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc:
+        return fallback
+    if not target.startswith('/') or target.startswith('//'):
+        return fallback
+    return target
 
 
 def _configured_password() -> str | None:
@@ -60,6 +84,11 @@ def login_required(view):
 
 
 @auth.route('/login', methods=['GET', 'POST'])
+# Só o POST conta: limita a força-bruta da senha sem travar o GET da tela.
+@limiter.limit(
+    lambda: current_app.config.get('RATELIMIT_LOGIN', '10 per minute'),
+    methods=['POST'],
+)
 def login():
     """Tela de login. Com auth desligada, redireciona direto ao dashboard."""
     if not auth_enabled() or is_authenticated():
@@ -69,13 +98,12 @@ def login():
         submitted = request.form.get('password', '')
         expected = _configured_password() or ''
         # compare_digest evita vazar o tamanho/igualdade por timing.
-        if compare_digest(submitted, expected):
+        if compare_digest(submitted.encode(), expected.encode()):
+            # Sessão "permanente" = expira após PERMANENT_SESSION_LIFETIME,
+            # em vez de valer pelos 31 dias default de um cookie assinado.
+            session.permanent = True
             session[SESSION_KEY] = True
-            next_url = request.args.get('next') or url_for('web.dashboard')
-            # Só aceita caminhos locais no next (evita open redirect).
-            if not next_url.startswith('/'):
-                next_url = url_for('web.dashboard')
-            return redirect(next_url)
+            return redirect(safe_next_url(request.args.get('next')))
         flash('Senha incorreta.', 'danger')
 
     return render_template('login.html')

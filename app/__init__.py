@@ -17,6 +17,22 @@ scheduler = BackgroundScheduler()
 configure_logging()
 logger = logging.getLogger(__name__)
 
+# Placeholders que já apareceram no repositório (config, .env-example, compose).
+KNOWN_PLACEHOLDER_SECRETS = frozenset({
+    'default-secret-key',
+    'change-me',
+    'sua-chave-secreta-aqui',
+    'sua_chave_secreta',
+})
+MIN_SECRET_KEY_LENGTH = 32
+
+
+def is_insecure_secret_key(secret_key: str | None) -> bool:
+    """True para chave ausente, placeholder conhecido ou curta demais."""
+    if not secret_key or secret_key in KNOWN_PLACEHOLDER_SECRETS:
+        return True
+    return len(secret_key) < MIN_SECRET_KEY_LENGTH
+
 
 def validate_config(config: Type[Config]) -> None:
     """
@@ -29,7 +45,13 @@ def validate_config(config: Type[Config]) -> None:
         ValueError: If required configuration is missing
     """
     # Check required Flask configuration
-    if not config.SECRET_KEY or config.SECRET_KEY == 'default-secret-key':
+    if is_insecure_secret_key(config.SECRET_KEY):
+        if config.is_production():
+            # Com uma chave conhecida qualquer um assina um cookie de sessão
+            # 'autenticado' e entra no dashboard sem a senha.
+            raise ValueError(
+                'SECRET_KEY insegura em produção: defina uma chave aleatória '
+                f'com pelo menos {MIN_SECRET_KEY_LENGTH} caracteres.')
         logger.warning(
             'Using default secret key. This is not secure for production.')
 
@@ -99,7 +121,7 @@ def register_blueprints(app: Flask) -> None:
     @app.errorhandler(429)
     def ratelimit_handler(error):
         """Resposta JSON para quando o rate-limit é atingido."""
-        from flask import jsonify, request
+        from flask import flash, jsonify, render_template, request
         description = getattr(error, 'description', 'rate limit exceeded')
         # Rotas da API respondem JSON; a web herda o HTML default do Flask.
         if request.path.startswith('/api'):
@@ -107,6 +129,18 @@ def register_blueprints(app: Flask) -> None:
                 'error': 'Too many requests',
                 'detail': str(description),
             }), 429
+        if request.endpoint == 'auth.login':
+            flash('Muitas tentativas de login. Aguarde um minuto e tente de novo.',
+                  'warning')
+            return render_template('login.html'), 429
+        return error
+
+    @app.errorhandler(413)
+    def payload_too_large_handler(error):
+        """Corpo acima de MAX_CONTENT_LENGTH: JSON na API, HTML na web."""
+        from flask import jsonify, request
+        if request.path.startswith('/api'):
+            return jsonify({'error': 'Request body too large'}), 413
         return error
 
 

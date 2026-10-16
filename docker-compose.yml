@@ -21,7 +21,10 @@ services:
       - "5000:5000"
     environment:
       FLASK_ENV: production
-      SECRET_KEY: ${SECRET_KEY:-change-me}
+      # Obrigatoria: com uma chave conhecida o cookie de sessao e forjavel.
+      SECRET_KEY: ${SECRET_KEY:?Defina SECRET_KEY com 32+ caracteres aleatorios (veja o README)}
+      # O compose serve HTTP em localhost; em producao (HTTPS) deixe true.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       DATABASE_URL: postgresql://feedlens:feedlens@db:5432/feedlens
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}

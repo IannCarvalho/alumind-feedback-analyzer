@@ -7,6 +7,10 @@ import uuid
 from app import db
 from app.models.types import GUID
 
+# Tamanho da coluna requested_features.code (VARCHAR). Fonte única para o
+# modelo e para quem grava, já que o código vem da saída da LLM.
+FEATURE_CODE_MAX_LENGTH = 50
+
 
 class Feedback(db.Model):
     """
@@ -76,7 +80,7 @@ class RequestedFeature(db.Model):
         GUID(), primary_key=True, default=uuid.uuid4)
     feedback_id: Mapped[uuid.UUID] = mapped_column(
         GUID(), ForeignKey('feedbacks.id'), nullable=False)
-    code: Mapped[str] = mapped_column(String(50), nullable=False)
+    code: Mapped[str] = mapped_column(String(FEATURE_CODE_MAX_LENGTH), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc))
