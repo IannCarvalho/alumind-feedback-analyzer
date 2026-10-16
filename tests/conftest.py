@@ -1,13 +1,12 @@
 """Shared pytest fixtures and environment setup.
 
-A dummy OPENAI_API_KEY is set before any app import because FeedbackAnalyzer
-validates the key at construction time and the api blueprint builds one at
-import time. With the dialect-agnostic GUID column type, the models now run on
-in-memory SQLite, so DB-backed integration tests are possible.
+No LLM key is needed: the app boots without one (BYOK) and every test that
+exercises analysis mocks the LLM layer. With the dialect-agnostic GUID column
+type, the models run on in-memory SQLite, so DB-backed integration tests are
+possible.
 """
 import os
 
-os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 # Desliga o rate-limit nos testes: o limitador é configurado no init_app a

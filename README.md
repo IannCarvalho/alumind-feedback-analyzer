@@ -10,6 +10,8 @@ Uma lente sobre o feedback dos seus usuários: análise automática de feedback 
 
 O FeedLens recebe feedbacks de usuários, classifica-os por sentimento, detecta spam e identifica as funcionalidades mais pedidas — e disponibiliza tudo em um dashboard web e em um resumo semanal por e-mail. Ele resolve o gargalo de analisar manualmente feedbacks que chegam de muitos canais (atendimento, comunidades, redes sociais).
 
+A análise é **BYOK (bring your own key) e multi-provedor**: funciona com OpenAI, Anthropic ou Google Gemini, usando as chaves do operador (com fallback entre provedores) ou a chave que o próprio cliente envia na requisição.
+
 A aplicação é responsável por:
 
 1. **Classificação de feedback** por sentimento (POSITIVO, NEGATIVO, INCONCLUSIVO)
@@ -63,8 +65,8 @@ feedlens/
   - SQLite (alternativa para desenvolvimento)
 
 - **Inteligência Artificial:**
-  - OpenAI API (GPT-4o-mini por padrão)
-  - LangChain (integração com LLMs)
+  - [LiteLLM](https://docs.litellm.ai/): interface única para OpenAI, Anthropic e Google Gemini (BYOK, fallback entre provedores)
+  - Pydantic (validação da saída do modelo) e [nh3](https://nh3.readthedocs.io/) (sanitização do HTML gerado para o e-mail)
 
 - **Frontend:**
   - HTML, CSS, JavaScript
@@ -84,7 +86,7 @@ feedlens/
 
 - Python 3.10 ou superior
 - PostgreSQL ou outro banco de dados SQL (ou SQLite para desenvolvimento)
-- Chave de API da OpenAI
+- Chave de API de pelo menos um provedor de LLM (OpenAI, Anthropic ou Google Gemini), no servidor ou enviada por requisição
 
 ### Instalação
 
@@ -122,10 +124,12 @@ FLASK_ENV=development
 SECRET_KEY=sua_chave_secreta
 DASHBOARD_PASSWORD=senha_de_acesso_ao_painel
 DATABASE_URL=postgresql://usuario:senha@localhost/feedlens
-OPENAI_API_KEY=sua_chave_api_openai
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_TIMEOUT=30
-OPENAI_MAX_RETRIES=2
+# LLM: preencha só os provedores que usar (OPENAI_/ANTHROPIC_/GEMINI_API_KEY)
+ANTHROPIC_API_KEY=sua_chave_anthropic
+# Opcional: ordem principal -> reservas, no formato provedor/modelo
+LLM_MODELS=anthropic/claude-haiku-4-5
+LLM_TIMEOUT=30
+LLM_MAX_RETRIES=2
 EMAIL_HOST=smtp.exemplo.com
 EMAIL_PORT=587
 EMAIL_USER=seu_email@exemplo.com
@@ -183,8 +187,8 @@ O projeto inclui um `Dockerfile` (gunicorn servindo `wsgi:app`) e um `docker-com
 O compose exige uma `SECRET_KEY` aleatória (32+ caracteres) e falha logo no `up` sem ela; defina-a no `.env` ou no shell (ex.: `$env:SECRET_KEY = python -c "import secrets; print(secrets.token_urlsafe(48))"` no PowerShell). Como ele serve HTTP em `localhost`, o compose desliga o cookie `Secure` por padrão (`SESSION_COOKIE_SECURE=false`).
 
 ```bash
-# A OPENAI_API_KEY e obrigatoria em producao (FLASK_ENV=production)
-export OPENAI_API_KEY=sua-chave   # no Windows: $env:OPENAI_API_KEY="sua-chave"
+# Opcional: chaves de LLM do servidor (sem nenhuma, a API so analisa com BYOK por requisicao)
+export ANTHROPIC_API_KEY=sua-chave   # no Windows: $env:ANTHROPIC_API_KEY="sua-chave"
 docker compose up --build
 ```
 
@@ -223,9 +227,29 @@ docker compose exec web flask db upgrade
       "code": "EDITAR_PERFIL",
       "reason": "O usuário gostaria de realizar a edição do próprio perfil"
     }
-  ]
+  ],
+  "analyzed_by": "anthropic/claude-haiku-4-5"
 }
 ```
+
+`analyzed_by` indica o `provedor/modelo` que fez a análise; `null` significa que as chaves do servidor falharam (timeout, cota, indisponibilidade) e o feedback foi gravado com o resultado seguro padrão (`INCONCLUSIVO`, sem spam, sem features).
+
+**BYOK por requisição (opcional):** o cliente pode usar a própria chave enviando os headers abaixo. Nesse caso **só** essa chave é usada (nunca as do servidor), ela não é gravada nem logada, e uma falha volta como erro em vez de virar `INCONCLUSIVO`, sem gravar nada, para que o mesmo `id` possa ser reenviado.
+
+| Header | Obrigatório | Exemplo |
+|---|---|---|
+| `X-LLM-Provider` | sim | `openai`, `anthropic` ou `gemini` |
+| `X-LLM-Api-Key` | sim | a chave do provedor |
+| `X-LLM-Model` | não | `claude-haiku-4-5` (padrão: o modelo padrão do provedor) |
+
+```bash
+curl -X POST https://seu-host/api/feedbacks \
+  -H "Content-Type: application/json" \
+  -H "X-LLM-Provider: anthropic" -H "X-LLM-Api-Key: $ANTHROPIC_API_KEY" \
+  -d '{"id": "550e8400-e29b-41d4-a716-446655440000", "feedback": "Adoro o app, mas falta modo escuro."}'
+```
+
+**Erros da análise:** `503 llm_not_configured` (nenhuma chave no servidor e nenhum BYOK enviado), `400 invalid_byok_headers` (provedor fora da lista, modelo ou chave malformados), `403` (BYOK desligado com `BYOK_REQUEST_KEYS_ENABLED=false`), `422 llm_auth_failed` (o provedor recusou a chave enviada) e `502 llm_request_failed` (falha do provedor com a chave enviada).
 
 **Rate limiting:** este endpoint público é limitado (padrão `30 per minute` por IP) via [Flask-Limiter](https://flask-limiter.readthedocs.io/). Ao exceder o limite a resposta é `429 Too Many Requests` com corpo JSON. Configurável por `RATELIMIT_INGEST`, `RATELIMIT_ENABLED` e `RATELIMIT_STORAGE_URI` (use `redis://...` em produção com múltiplos workers; o default `memory://` serve a um único processo). Os endpoints `GET` não são limitados.
 
@@ -343,13 +367,27 @@ O SMTP usa STARTTLS com certificado verificado e `EMAIL_TIMEOUT` (padrão 30s). 
 
 - **Padrão Repository:** abstração do acesso ao banco de dados através dos serviços
 
-### Integração com IA
+### Provedores de LLM (BYOK)
 
-- A análise de feedbacks usa a API da OpenAI através do LangChain
-- O prompt de análise identifica:
-  - Sentimento (POSITIVO, NEGATIVO, INCONCLUSIVO)
-  - Detecção de spam
-  - Funcionalidades solicitadas
+A camada `app/llm/` fala com os modelos via [LiteLLM](https://docs.litellm.ai/) e decide, a cada chamada, **de onde vem a chave**:
+
+1. **BYOK por requisição** (headers `X-LLM-*`): usa só a chave do cliente.
+2. **Chaves do servidor** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`): `LLM_MODELS` define a cadeia `provedor/modelo`, principal primeiro e reservas depois (ex.: `anthropic/claude-haiku-4-5,openai/gpt-4o-mini`). Sem `LLM_MODELS`, todo provedor com chave entra, no modelo padrão, na ordem OpenAI → Anthropic → Gemini.
+
+Se o principal falha (timeout, cota, chave revogada, indisponibilidade), a análise segue para o próximo da cadeia. Trocar de provedor é mudar a ordem em `LLM_MODELS`; nenhuma chave é obrigatória para o app subir.
+
+| Provedor | Variável | Modelo padrão |
+|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` (ou `OPENAI_MODEL`, mantido por compatibilidade) |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` |
+| Google Gemini | `GEMINI_API_KEY` | `gemini-2.5-flash-lite` |
+
+Cuidados de segurança:
+
+- **Allowlist de provedores:** só os três acima. Prefixos como `bedrock/` ou `ollama/` usariam credenciais ou hosts internos do servidor e são recusados.
+- **A chave não vaza:** não é gravada, não aparece em `repr` e é removida das mensagens de erro e dos logs; o log do próprio LiteLLM fica em `WARNING` para não registrar o texto dos feedbacks.
+- **Prompt injection:** as instruções vão na mensagem de sistema e o feedback vai delimitado, como dado. Códigos de feature são normalizados (`EDICAO_DE_PERFIL`, até 50 caracteres, no máximo 10 por feedback), e o HTML gerado para o e-mail passa por sanitização: só tags de formatação, sem links, imagens ou atributos.
+- **Custo e latência:** cada chamada loga provedor, latência, tokens e custo estimado. O LiteLLM é importado sob demanda (e aquecido em segundo plano no `wsgi.py`), então boot, CLI e testes não pagam seu import.
 
 ## Possíveis Melhorias
 

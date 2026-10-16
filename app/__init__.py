@@ -55,9 +55,9 @@ def validate_config(config: Type[Config]) -> None:
         logger.warning(
             'Using default secret key. This is not secure for production.')
 
-    # Check OpenAI configuration
-    if not config.OPENAI_API_KEY:
-        raise ValueError('OPENAI_API_KEY must be set')
+    # Check LLM configuration (BYOK: no server key is required)
+    from app.llm import validate_llm_config
+    validate_llm_config(config)
 
     # Check email configuration if in production
     if config.is_production() and not config.has_email_config():

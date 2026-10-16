@@ -4,7 +4,6 @@ Os testes constroem um app com o limitador LIGADO e um limite propositalmente
 baixo, isolando o storage em memória, para provar que o 429 dispara e que a
 resposta é JSON (não o HTML default do Flask-Limiter).
 """
-import os
 from unittest.mock import patch
 
 import pytest
@@ -25,8 +24,6 @@ class RateLimitedConfig(Config):
 @pytest.fixture()
 def limited_client():
     """Client de um app com o rate-limit ativo (limite de 2/min)."""
-    # Garante a key para o FeedbackAnalyzer construído no import do blueprint.
-    os.environ.setdefault('OPENAI_API_KEY', 'test-key')
     application = create_app(RateLimitedConfig)
     with application.app_context():
         db.create_all()

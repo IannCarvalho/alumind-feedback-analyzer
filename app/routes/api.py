@@ -8,6 +8,12 @@ from app.extensions import limiter
 from app.models.feedback import FEATURE_CODE_MAX_LENGTH, Feedback, RequestedFeature
 from app.services.feedback_analyzer import FeedbackAnalyzer
 from app.services.feedback_service import FeedbackService
+from app.llm import (
+    ByokHeaderError,
+    LLMNotConfiguredError,
+    LLMRequestError,
+    credential_from_headers,
+)
 
 api = Blueprint('api', __name__)
 feedback_analyzer = FeedbackAnalyzer()
@@ -76,13 +82,40 @@ def analyze_feedback():
     feedback_id = data['id']
     feedback_text = data['feedback']
 
+    # BYOK por requisição (opcional): X-LLM-Provider + X-LLM-Api-Key.
+    try:
+        credential = credential_from_headers(request.headers)
+    except ByokHeaderError as e:
+        return jsonify({'error': str(e), 'code': 'invalid_byok_headers'}), e.status_code
+
     # Check if feedback already exists
     if FeedbackService.get_feedback_by_id(feedback_id):
         return jsonify({'error': 'Feedback with this ID already exists'}), 409
 
     # Analyze feedback
     logger.info('Analyzing feedback id=%s', feedback_id)
-    analysis_result = feedback_analyzer.analyze_feedback(feedback_text)
+    try:
+        analysis_result = feedback_analyzer.analyze_feedback(
+            feedback_text, credential=credential)
+    except LLMNotConfiguredError:
+        return jsonify({
+            'error': 'Nenhum provedor de LLM configurado: defina uma chave no '
+                     'servidor ou envie X-LLM-Provider e X-LLM-Api-Key.',
+            'code': 'llm_not_configured',
+        }), 503
+    except LLMRequestError as e:
+        # Só acontece com BYOK: a chave/modelo do próprio cliente falhou, então
+        # nada é gravado e ele pode reenviar o mesmo id.
+        if e.auth_failed:
+            return jsonify({
+                'error': 'O provedor recusou a chave enviada em X-LLM-Api-Key.',
+                'code': 'llm_auth_failed',
+            }), 422
+        return jsonify({
+            'error': 'O provedor de LLM falhou com a credencial enviada.',
+            'code': 'llm_request_failed',
+            'detail': e.attempts[-1].kind if e.attempts else None,
+        }), 502
     sentiment = analysis_result.get('sentiment', 'INCONCLUSIVO')
     is_spam = analysis_result.get('is_spam', False)
     requested_features = analysis_result.get('requested_features', [])
@@ -124,7 +157,9 @@ def analyze_feedback():
         'id': str(feedback.id),
         'sentiment': feedback.sentiment,
         'is_spam': feedback.is_spam,
-        'requested_features': [feature.to_dict() for feature in feedback.requested_features]
+        'requested_features': [feature.to_dict() for feature in feedback.requested_features],
+        # 'provedor/modelo' que fez a análise; null = resultado seguro padrão.
+        'analyzed_by': analysis_result.get('analyzed_by'),
     }), 201
 
 

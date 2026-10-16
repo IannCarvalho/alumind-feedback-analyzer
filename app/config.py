@@ -42,8 +42,8 @@ class Config:
         FLASK_ENV: Current environment (development/production)
         SQLALCHEMY_DATABASE_URI: Database connection string
         SQLALCHEMY_TRACK_MODIFICATIONS: Whether to track model modifications
-        OPENAI_API_KEY: OpenAI API key for sentiment analysis
-        OPENAI_MODEL: OpenAI model to use
+        OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY: optional provider keys (BYOK)
+        LLM_MODELS: ordered 'provider/model' chain (primary first, then fallbacks)
         EMAIL_*: Email server configuration
         EMAIL_RECIPIENTS: List of email addresses for weekly summary
     """
@@ -79,13 +79,25 @@ class Config:
         'DATABASE_URL', 'sqlite:///feedlens.db')
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
 
-    # OpenAI configuration
+    # LLM: BYOK multi-provedor via LiteLLM (app/llm). Nenhuma chave é
+    # obrigatória: sem chave no servidor, a análise depende do BYOK enviado
+    # na requisição (headers X-LLM-*).
     OPENAI_API_KEY: Optional[str] = os.environ.get('OPENAI_API_KEY')
+    ANTHROPIC_API_KEY: Optional[str] = os.environ.get('ANTHROPIC_API_KEY')
+    GEMINI_API_KEY: Optional[str] = os.environ.get('GEMINI_API_KEY')
+    # Ordem de uso 'provedor/modelo' (principal primeiro, depois reservas),
+    # ex.: anthropic/claude-haiku-4-5,openai/gpt-4o-mini. Vazio = todo
+    # provedor com chave, no modelo padrão de app/llm/providers.py.
+    LLM_MODELS: List[str] = get_env_list('LLM_MODELS')
+    # Compatibilidade: modelo da OpenAI quando LLM_MODELS não é definido.
     OPENAI_MODEL: str = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
-    # Timeout (segundos) e nº de retries da chamada à LLM. Evita que uma
-    # chamada travada à OpenAI segure o request indefinidamente.
-    OPENAI_TIMEOUT: int = get_env_int('OPENAI_TIMEOUT', 30)
-    OPENAI_MAX_RETRIES: int = get_env_int('OPENAI_MAX_RETRIES', 2)
+    # Timeout (s) e retries POR provedor da cadeia (os nomes OPENAI_* antigos
+    # continuam aceitos). Evita que uma chamada travada segure o request.
+    LLM_TIMEOUT: int = get_env_int('LLM_TIMEOUT', get_env_int('OPENAI_TIMEOUT', 30))
+    LLM_MAX_RETRIES: int = get_env_int(
+        'LLM_MAX_RETRIES', get_env_int('OPENAI_MAX_RETRIES', 2))
+    # Aceita BYOK por requisição (X-LLM-Provider / X-LLM-Api-Key / X-LLM-Model).
+    BYOK_REQUEST_KEYS_ENABLED: bool = get_env_bool('BYOK_REQUEST_KEYS_ENABLED', True)
 
     # Email configuration
     EMAIL_HOST: Optional[str] = os.environ.get('EMAIL_HOST')
