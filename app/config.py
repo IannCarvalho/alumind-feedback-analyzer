@@ -55,6 +55,11 @@ class Config:
     # Senha de acesso ao dashboard (rotas web). Se vazia, o dashboard
     # fica aberto (comportamento histórico, útil em desenvolvimento).
     DASHBOARD_PASSWORD: Optional[str] = os.environ.get('DASHBOARD_PASSWORD')
+    # Token de leitura da API (GET /api/feedbacks...): clientes servidor-a-
+    # servidor enviam "Authorization: Bearer <token>". Com DASHBOARD_PASSWORD
+    # ou este token definidos, a leitura exige credencial; sem nenhum dos
+    # dois a API continua aberta (dev). Frontend da mesma origem usa a sessão.
+    API_READ_TOKEN: Optional[str] = os.environ.get('API_READ_TOKEN')
 
     # Cookie de sessão do dashboard. HttpOnly impede leitura por JS e
     # SameSite=Lax corta CSRF cross-site nos POSTs do painel. Secure (só

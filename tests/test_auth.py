@@ -10,6 +10,8 @@ import pytest
 
 from app import create_app, db
 
+from tests.helpers import login, post_form
+
 
 @pytest.fixture()
 def secured_client():
@@ -38,9 +40,7 @@ def test_dashboard_redirects_to_login_when_secured(secured_client):
 
 def test_login_with_correct_password_grants_access(secured_client):
     """Senha correta autentica e dá acesso ao dashboard."""
-    resp = secured_client.post(
-        "/login", data={"password": "segredo"}, follow_redirects=False
-    )
+    resp = login(secured_client, "segredo", follow_redirects=False)
     assert resp.status_code == 302
     # Depois do login, o dashboard responde 200.
     assert secured_client.get("/dashboard").status_code == 200
@@ -48,9 +48,7 @@ def test_login_with_correct_password_grants_access(secured_client):
 
 def test_login_with_wrong_password_is_rejected(secured_client):
     """Senha errada não autentica e mantém o dashboard bloqueado."""
-    resp = secured_client.post(
-        "/login", data={"password": "errada"}, follow_redirects=True
-    )
+    resp = login(secured_client, "errada", follow_redirects=True)
     assert resp.status_code == 200
     assert "Senha incorreta" in resp.get_data(as_text=True)
     # Ainda sem acesso.
@@ -59,18 +57,19 @@ def test_login_with_wrong_password_is_rejected(secured_client):
 
 def test_logout_clears_session(secured_client):
     """Logout encerra a sessão e volta a bloquear o dashboard."""
-    secured_client.post("/login", data={"password": "segredo"})
+    login(secured_client, "segredo")
     assert secured_client.get("/dashboard").status_code == 200
 
-    secured_client.post("/logout")
+    post_form(secured_client, "/logout")
     assert secured_client.get("/dashboard").status_code == 302
 
 
 def test_login_rejects_open_redirect(secured_client):
     """O parâmetro next só aceita caminhos locais (anti open-redirect)."""
-    resp = secured_client.post(
+    resp = post_form(
+        secured_client,
         "/login?next=https://evil.example.com",
-        data={"password": "segredo"},
+        {"password": "segredo"},
         follow_redirects=False,
     )
     assert resp.status_code == 302

@@ -18,6 +18,8 @@ from app.models.provider_credential import ProviderCredential
 from app.services import credential_store as store
 from app.services.feedback_analyzer import FeedbackAnalyzer
 
+from tests.helpers import login
+
 PASSWORD = "segredo-do-painel"
 OPENAI_KEY = "sk-proj-AAAA1111BBBB2222a1b2"
 ANTHROPIC_KEY = "sk-ant-api03-CCCC3333DDDD4444z9y8"
@@ -55,7 +57,7 @@ def secured_app():
 def admin(secured_app):
     """Client logado, com o token CSRF já em mãos."""
     client = secured_app.test_client()
-    assert client.post("/login", data={"password": PASSWORD}).status_code == 302
+    assert login(client, PASSWORD).status_code == 302
     body = client.get(BASE).get_json()
     client.csrf = {"X-CSRF-Token": body["csrf_token"]}
     return client

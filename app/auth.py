@@ -19,6 +19,7 @@ from flask import (
     Blueprint,
     current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -26,6 +27,7 @@ from flask import (
     url_for,
 )
 
+from app.csrf import csrf_is_valid, csrf_protect, rotate_csrf_token
 from app.extensions import limiter
 
 auth = Blueprint('auth', __name__)
@@ -83,6 +85,53 @@ def login_required(view):
     return wrapped
 
 
+def _configured_api_token() -> str | None:
+    """Token de leitura da API (``API_READ_TOKEN``), ou None se ausente."""
+    return current_app.config.get('API_READ_TOKEN') or None
+
+
+def read_api_open() -> bool:
+    """A API de leitura só fica aberta se NADA estiver configurado (dev)."""
+    return not auth_enabled() and _configured_api_token() is None
+
+
+def _bearer_token() -> str:
+    scheme, _, value = request.headers.get('Authorization', '').partition(' ')
+    return value.strip() if scheme.lower() == 'bearer' else ''
+
+
+def api_read_allowed() -> bool:
+    """True se a requisição pode ler a API.
+
+    Aceita, nesta ordem: API aberta (nada configurado, comportamento
+    histórico de dev), ``Authorization: Bearer <API_READ_TOKEN>`` (clientes
+    servidor-a-servidor) ou a sessão do painel (frontend da mesma origem).
+    """
+    if read_api_open():
+        return True
+    token = _configured_api_token()
+    sent = _bearer_token()
+    if token and sent and compare_digest(sent.encode(), token.encode()):
+        return True
+    return auth_enabled() and bool(session.get(SESSION_KEY))
+
+
+def api_read_required(view):
+    """Protege os GET da API de feedbacks: 401 JSON (sem redirect) se negado."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not api_read_allowed():
+            response = jsonify({
+                'error': 'Autenticação necessária para ler os feedbacks.',
+                'code': 'unauthenticated',
+            })
+            response.status_code = 401
+            response.headers['WWW-Authenticate'] = 'Bearer'
+            return response
+        return view(*args, **kwargs)
+    return wrapped
+
+
 @auth.route('/login', methods=['GET', 'POST'])
 # Só o POST conta: limita a força-bruta da senha sem travar o GET da tela.
 @limiter.limit(
@@ -95,14 +144,20 @@ def login():
         return redirect(url_for('web.dashboard'))
 
     if request.method == 'POST':
+        if not csrf_is_valid():
+            flash('Sua sessão expirou. Tente entrar de novo.', 'warning')
+            return render_template('login.html'), 400
         submitted = request.form.get('password', '')
         expected = _configured_password() or ''
         # compare_digest evita vazar o tamanho/igualdade por timing.
         if compare_digest(submitted.encode(), expected.encode()):
-            # Sessão "permanente" = expira após PERMANENT_SESSION_LIFETIME,
-            # em vez de valer pelos 31 dias default de um cookie assinado.
+            # Sessão nova no login (evita fixação de sessão) e token CSRF novo.
+            # "Permanente" = expira após PERMANENT_SESSION_LIFETIME, em vez
+            # dos 31 dias default de um cookie assinado.
+            session.clear()
             session.permanent = True
             session[SESSION_KEY] = True
+            rotate_csrf_token()
             return redirect(safe_next_url(request.args.get('next')))
         flash('Senha incorreta.', 'danger')
 
@@ -110,7 +165,8 @@ def login():
 
 
 @auth.route('/logout', methods=['POST'])
+@csrf_protect
 def logout():
     """Encerra a sessão do dashboard."""
-    session.pop(SESSION_KEY, None)
+    session.clear()
     return redirect(url_for('auth.login'))
