@@ -14,8 +14,8 @@ export interface RequestedFeature {
 
 export interface Feedback {
   id: string
-  feedback_text: string
-  sentiment: Sentiment
+  feedback: string
+  sentiment: Sentiment | null
   is_spam: boolean
   created_at: string
   requested_features: RequestedFeature[]
@@ -77,4 +77,27 @@ export interface ApiError {
   error: string
   code?: string
   detail?: string
+}
+
+/* ---- Estatísticas do dashboard (GET /api/stats) ---- */
+
+export interface SentimentCounts {
+  POSITIVO: number
+  NEGATIVO: number
+  INCONCLUSIVO: number
+}
+
+export interface FeatureStat {
+  code: string
+  count: number
+  percentage: number
+}
+
+export interface DashboardStats {
+  has_data: boolean
+  total_feedbacks?: number
+  sentiment_counts?: SentimentCounts
+  sentiment_percentages?: Record<keyof SentimentCounts, number>
+  top_features?: FeatureStat[]
+  recent_feedbacks?: Feedback[]
 }
