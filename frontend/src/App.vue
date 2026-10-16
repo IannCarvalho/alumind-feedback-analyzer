@@ -9,8 +9,14 @@ const isDark = ref(false)
 
 const nav = [
   { to: '/', label: 'Visão geral', icon: 'pi pi-chart-bar' },
+  { to: '/feedbacks', label: 'Feedbacks', icon: 'pi pi-comments' },
   { to: '/providers', label: 'Provedores de IA', icon: 'pi pi-sliders-h' },
 ]
+
+function isActive(to: string): boolean {
+  // '/' casa só exato; as demais casam a seção inteira (ex /feedbacks/:id).
+  return to === '/' ? route.path === '/' : route.path.startsWith(to)
+}
 
 function applyTheme(dark: boolean) {
   isDark.value = dark
@@ -46,7 +52,7 @@ onMounted(() => {
           :key="item.to"
           :to="item.to"
           class="fl-nav__link"
-          :class="{ 'fl-nav__link--active': route.path === item.to }"
+          :class="{ 'fl-nav__link--active': isActive(item.to) }"
         >
           <i :class="item.icon" aria-hidden="true" />
           <span>{{ item.label }}</span>
