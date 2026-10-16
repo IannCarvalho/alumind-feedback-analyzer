@@ -2,6 +2,7 @@ from typing import List, Optional, Dict
 from app import db
 from app.models.feedback import Feedback
 from sqlalchemy import desc
+from sqlalchemy.orm import selectinload
 
 
 class FeedbackService:
@@ -25,7 +26,10 @@ class FeedbackService:
         per_page: int = 20
     ) -> Dict:
         """Get paginated feedbacks with optional filters"""
-        query = Feedback.query
+        # selectinload: as features da página inteira vêm em UMA query extra
+        # (WHERE feedback_id IN ...), em vez de uma query por feedback quando
+        # to_dict() ou o template acessam requested_features.
+        query = Feedback.query.options(selectinload(Feedback.requested_features))
 
         if sentiment:
             query = query.filter(Feedback.sentiment == sentiment.upper())
