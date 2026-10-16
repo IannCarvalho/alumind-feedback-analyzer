@@ -135,6 +135,9 @@ def register_blueprints(app: Flask) -> None:
     from app.routes.web import web as web_blueprint
     app.register_blueprint(web_blueprint)
 
+    from app.routes.spa import spa as spa_blueprint
+    app.register_blueprint(spa_blueprint)
+
     from app.routes.health import health as health_blueprint
     app.register_blueprint(health_blueprint)
 

@@ -14,8 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -73,3 +73,9 @@ instance/
 # Logs
 logs/
 *.log
+
+# Frontend (Vue + Vite)
+frontend/node_modules/
+frontend/dist/
+# Build output do SPA, gerado por `vite build` (no CI e no deploy).
+app/static/spa/

@@ -1,0 +1,80 @@
+/*
+ * Tipos do contrato da API do FeedLens. Espelham o que o backend Flask
+ * devolve hoje (app/routes/api.py e settings_api.py). Mantidos à mão por ora;
+ * quando o backend expuser OpenAPI, dá para gerar isto automaticamente.
+ */
+
+export type Sentiment = 'POSITIVO' | 'NEGATIVO' | 'INCONCLUSIVO'
+export type ProviderId = 'openai' | 'anthropic' | 'gemini'
+
+export interface RequestedFeature {
+  code: string
+  reason: string
+}
+
+export interface Feedback {
+  id: string
+  feedback_text: string
+  sentiment: Sentiment
+  is_spam: boolean
+  created_at: string
+  requested_features: RequestedFeature[]
+}
+
+export interface Pagination {
+  page: number
+  per_page: number
+  total: number
+  pages: number
+  has_next: boolean
+  has_prev: boolean
+}
+
+export interface FeedbackListResponse {
+  items: Feedback[]
+  pagination: Pagination
+  sentiment: string | null
+}
+
+/* ---- Cofre de provedores (BYOK do operador) ---- */
+
+export interface ProviderCatalogEntry {
+  id: ProviderId
+  label: string
+  default_model: string
+  server_key_configured: boolean
+}
+
+export interface ProviderCredential {
+  id: string
+  provider: ProviderId
+  model: string
+  priority: number
+  enabled: boolean
+  key_hint: string
+  verified: boolean
+  last_verified_at: string | null
+  last_error_kind: string | null
+}
+
+export interface ProvidersResponse {
+  vault_enabled: boolean
+  csrf_token: string
+  catalog: ProviderCatalogEntry[]
+  environment_chain: string[]
+  providers: ProviderCredential[]
+}
+
+export interface ProviderTestResult {
+  ok: boolean
+  kind: string | null
+  latency_ms: number | null
+  checked_at: string
+  provider: ProviderCredential
+}
+
+export interface ApiError {
+  error: string
+  code?: string
+  detail?: string
+}
