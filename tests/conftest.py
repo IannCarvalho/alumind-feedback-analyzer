@@ -19,6 +19,21 @@ import pytest
 from app import create_app, db
 
 
+@pytest.fixture(autouse=True)
+def _dispose_engines():
+    """Fecha o pool de conexões de todo app criado no teste.
+
+    Cada ``create_app()`` abre um engine novo e, num Postgres de verdade, o
+    pool segura conexões até o app ser coletado pelo GC. Com ~200 testes isso
+    estoura o ``max_connections`` do servidor ("too many clients already"),
+    e o CI com Postgres pegou exatamente isso. Em SQLite é inofensivo.
+    """
+    yield
+    for engines in list(getattr(db, "_app_engines", {}).values()):
+        for engine in engines.values():
+            engine.dispose()
+
+
 @pytest.fixture()
 def app():
     """A Flask app bound to an in-memory SQLite database with tables created."""
