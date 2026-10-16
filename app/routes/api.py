@@ -10,6 +10,7 @@ from app.ingest_auth import ingest_key_required
 from app.models.feedback import FEATURE_CODE_MAX_LENGTH, Feedback, RequestedFeature
 from app.services.feedback_analyzer import FeedbackAnalyzer
 from app.services.feedback_service import FeedbackService
+from app.services.statistics_service import Statistics
 from app.llm import (
     ByokHeaderError,
     LLMNotConfiguredError,
@@ -226,3 +227,27 @@ def get_feedback(feedback_id):
         return jsonify({'error': 'Feedback not found'}), 404
 
     return jsonify(feedback.to_dict()), 200
+
+
+@api.route('/stats', methods=['GET'])
+@api_read_required
+def dashboard_stats():
+    """Estatísticas do dashboard + feedbacks recentes, para o painel Vue.
+
+    Espelha o que ``get_dashboard_statistics`` já calcula (duas queries) e
+    anexa os recentes. Mesma proteção dos GET de feedbacks (sessão do painel
+    ou ``API_READ_TOKEN``), já que expõe o conteúdo dos feedbacks.
+    """
+    stats = Statistics.get_dashboard_statistics()
+    if not stats.get('has_data'):
+        return jsonify({'has_data': False}), 200
+
+    recent = FeedbackService.get_recent_feedbacks()
+    return jsonify({
+        'has_data': True,
+        'total_feedbacks': stats['total_feedbacks'],
+        'sentiment_counts': stats['sentiment_counts'],
+        'sentiment_percentages': stats['sentiment_percentages'],
+        'top_features': stats['top_features'],
+        'recent_feedbacks': [item.to_dict() for item in recent],
+    }), 200

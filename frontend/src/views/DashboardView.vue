@@ -1,36 +1,119 @@
 <script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import Card from 'primevue/card'
-import Tag from 'primevue/tag'
+import Message from 'primevue/message'
+import ProgressSpinner from 'primevue/progressspinner'
+
+import SentimentChart from '@/components/SentimentChart.vue'
+import FeaturesChart from '@/components/FeaturesChart.vue'
+import { useStatsStore } from '@/stores/stats'
+import { HttpError } from '@/lib/http'
+import { formatDate, sentimentMeta } from '@/lib/sentiment'
+
+const store = useStatsStore()
+const error = ref<string | null>(null)
+
+const stats = computed(() => store.data)
+const hasData = computed(() => stats.value?.has_data === true)
+
+onMounted(async () => {
+  try {
+    await store.load()
+  } catch (e) {
+    error.value = e instanceof HttpError ? e.message : 'Não foi possível carregar as estatísticas.'
+  }
+})
+
+function truncate(text: string, max = 60): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
 </script>
 
 <template>
   <section class="fl-page">
     <header class="fl-page__head">
       <h1>Visão geral</h1>
-      <p class="fl-muted">
-        Foco no que seus usuários pedem, com a IA que você escolher.
-      </p>
+      <p class="fl-muted">Foco no que seus usuários pedem, com a IA que você escolher.</p>
     </header>
 
-    <Card class="fl-note">
-      <template #content>
-        <div class="fl-note__body">
-          <i class="pi pi-wrench" aria-hidden="true" />
-          <div>
-            <strong>Andaime do novo front.</strong>
-            Esta é a base Vue 3 + Vite + PrimeVue. As estatísticas e os gráficos
-            do dashboard chegam no próximo PR; aqui provamos a arquitetura
-            (layout, tema, roteamento e a tela de provedores já ligada à API).
-            <div class="fl-note__tags">
-              <Tag value="Vue 3" severity="secondary" />
-              <Tag value="Vite" severity="secondary" />
-              <Tag value="PrimeVue" severity="secondary" />
-              <Tag value="TypeScript" severity="secondary" />
+    <div v-if="store.loading" class="fl-loading">
+      <ProgressSpinner style="width: 2.5rem; height: 2.5rem" />
+    </div>
+
+    <Message v-else-if="error" severity="warn" :closable="false">{{ error }}</Message>
+
+    <Message v-else-if="!hasData" severity="info" :closable="false">
+      Nenhum feedback foi registrado ainda.
+    </Message>
+
+    <template v-else-if="stats">
+      <!-- Cards -->
+      <div class="fl-cards">
+        <Card class="fl-stat">
+          <template #content>
+            <div class="fl-stat__label">Total de feedbacks</div>
+            <div class="fl-stat__value">{{ stats.total_feedbacks }}</div>
+          </template>
+        </Card>
+        <Card class="fl-stat">
+          <template #content>
+            <div class="fl-stat__label">Positivos</div>
+            <div class="fl-stat__value" style="color: var(--fl-positive)">
+              {{ stats.sentiment_percentages?.POSITIVO.toFixed(1) }}%
             </div>
+            <div class="fl-stat__sub">{{ stats.sentiment_counts?.POSITIVO }} feedbacks</div>
+          </template>
+        </Card>
+        <Card class="fl-stat">
+          <template #content>
+            <div class="fl-stat__label">Negativos</div>
+            <div class="fl-stat__value" style="color: var(--fl-negative)">
+              {{ stats.sentiment_percentages?.NEGATIVO.toFixed(1) }}%
+            </div>
+            <div class="fl-stat__sub">{{ stats.sentiment_counts?.NEGATIVO }} feedbacks</div>
+          </template>
+        </Card>
+      </div>
+
+      <!-- Gráficos -->
+      <div class="fl-charts">
+        <Card>
+          <template #title>Distribuição de sentimentos</template>
+          <template #content>
+            <SentimentChart v-if="stats.sentiment_counts" :counts="stats.sentiment_counts" />
+          </template>
+        </Card>
+        <Card>
+          <template #title>Funcionalidades mais solicitadas</template>
+          <template #content>
+            <FeaturesChart v-if="stats.top_features" :features="stats.top_features" />
+          </template>
+        </Card>
+      </div>
+
+      <!-- Recentes -->
+      <Card class="fl-recent">
+        <template #title>
+          <div class="fl-recent__head">
+            <span>Feedbacks recentes</span>
+            <RouterLink to="/feedbacks" class="fl-link">Ver todos</RouterLink>
           </div>
-        </div>
-      </template>
-    </Card>
+        </template>
+        <template #content>
+          <ul class="fl-recent__list">
+            <li v-for="f in stats.recent_feedbacks" :key="f.id" class="fl-recent__row">
+              <span :class="sentimentMeta(f.sentiment).chipClass">
+                <i :class="sentimentMeta(f.sentiment).icon" aria-hidden="true" />
+                {{ sentimentMeta(f.sentiment).label }}
+              </span>
+              <span class="fl-recent__text">{{ truncate(f.feedback) }}</span>
+              <time class="fl-recent__date">{{ formatDate(f.created_at) }}</time>
+            </li>
+          </ul>
+        </template>
+      </Card>
+    </template>
   </section>
 </template>
 
@@ -43,21 +126,86 @@ import Tag from 'primevue/tag'
   color: var(--fl-text-muted);
   margin: 0 0 1.5rem;
 }
-.fl-note__body {
+.fl-loading {
   display: flex;
+  justify-content: center;
+  padding: 3rem;
+}
+.fl-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.fl-stat__label {
+  font-size: 0.8rem;
+  color: var(--fl-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.fl-stat__value {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-top: 0.25rem;
+}
+.fl-stat__sub {
+  font-size: 0.8rem;
+  color: var(--fl-text-muted);
+}
+.fl-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.fl-recent__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.fl-link {
+  font-size: 0.85rem;
+  color: var(--fl-cyan);
+  text-decoration: none;
+}
+.fl-link:hover {
+  text-decoration: underline;
+}
+.fl-recent__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fl-recent__row {
+  display: flex;
+  align-items: center;
   gap: 0.75rem;
-  align-items: flex-start;
-  line-height: 1.6;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--fl-border);
 }
-.fl-note__body i {
-  color: var(--fl-amber);
-  font-size: 1.2rem;
-  margin-top: 0.15rem;
+.fl-recent__row:last-child {
+  border-bottom: none;
 }
-.fl-note__tags {
-  display: flex;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
-  flex-wrap: wrap;
+.fl-recent__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+.fl-recent__date {
+  font-size: 0.78rem;
+  color: var(--fl-text-muted);
+  font-family: var(--fl-font-mono);
+  white-space: nowrap;
+}
+@media (max-width: 860px) {
+  .fl-cards,
+  .fl-charts {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
