@@ -12,6 +12,17 @@ from app.models.types import GUID
 FEATURE_CODE_MAX_LENGTH = 50
 
 
+def as_utc(value: datetime) -> datetime:
+    """Devolve ``value`` com fuso UTC explícito.
+
+    O Postgres devolve ``timestamptz`` já com fuso; o SQLite devolve datetimes
+    ingênuos (gravados em UTC). Normalizar mantém o JSON da API igual nos dois.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 class Feedback(db.Model):
     """
     Model for storing user feedback
@@ -30,9 +41,10 @@ class Feedback(db.Model):
         GUID(), primary_key=True, default=uuid.uuid4)
     feedback_text: Mapped[str] = mapped_column(Text, nullable=False)
     sentiment: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    is_spam: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_spam: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc))
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        index=True)
 
     # Relationship with requested features
     requested_features: Mapped[List['RequestedFeature']] = relationship(
@@ -57,7 +69,7 @@ class Feedback(db.Model):
             'feedback': self.feedback_text,
             'sentiment': self.sentiment,
             'is_spam': self.is_spam,
-            'created_at': self.created_at.isoformat(),
+            'created_at': as_utc(self.created_at).isoformat(),
             'requested_features': [feature.to_dict() for feature in self.requested_features]
         }
 
@@ -79,11 +91,12 @@ class RequestedFeature(db.Model):
     id: Mapped[uuid.UUID] = mapped_column(
         GUID(), primary_key=True, default=uuid.uuid4)
     feedback_id: Mapped[uuid.UUID] = mapped_column(
-        GUID(), ForeignKey('feedbacks.id'), nullable=False)
-    code: Mapped[str] = mapped_column(String(FEATURE_CODE_MAX_LENGTH), nullable=False)
+        GUID(), ForeignKey('feedbacks.id'), nullable=False, index=True)
+    code: Mapped[str] = mapped_column(
+        String(FEATURE_CODE_MAX_LENGTH), nullable=False, index=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc))
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationship with feedback
     feedback: Mapped['Feedback'] = relationship(

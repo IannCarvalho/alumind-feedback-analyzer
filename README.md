@@ -134,11 +134,18 @@ EMAIL_USE_TLS=true
 EMAIL_RECIPIENTS=stakeholder1@exemplo.com,stakeholder2@exemplo.com
 ```
 
-6. Inicialize o banco de dados:
+6. Crie as tabelas aplicando as migrations versionadas (`migrations/versions/`):
 ```bash
-flask db migrate -m "Initial migration"
 flask db upgrade
 ```
+
+   **Já tem um banco criado antes das migrations versionadas** (por `flask db migrate` ou `db.create_all()`)? Marque-o como estando no baseline e só então atualize, para não tentar recriar as tabelas:
+```bash
+flask db stamp 0001
+flask db upgrade
+```
+
+   Ao mudar um modelo, gere a revisão com `flask db migrate -m "descrição"`, **revise o arquivo gerado** e commite-o. O CI roda `flask db check` num Postgres e falha se os modelos e as migrations divergirem.
 
 ### Executando a Aplicação
 
@@ -186,9 +193,7 @@ A aplicação sobe em `http://localhost:5000` e o Postgres em `localhost:5432`. 
 Na primeira execução, crie as tabelas no banco (o container `web` compartilha o código):
 
 ```bash
-docker compose exec web flask db upgrade   # apos gerar as migracoes
-# ou, para um bootstrap rapido sem migracoes:
-docker compose exec web python -c "from app import create_app, db; app=create_app(); ctx=app.app_context(); ctx.push(); db.create_all()"
+docker compose exec web flask db upgrade
 ```
 
 ## Endpoints da API
