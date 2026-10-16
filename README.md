@@ -159,11 +159,21 @@ As rotas web do painel (`/`, `/dashboard`, `/feedbacks`, `/feedback/<id>`) são 
 - **Com `DASHBOARD_PASSWORD` definida:** o painel exige login e exibe um botão "Sair".
 - **Sem `DASHBOARD_PASSWORD` (vazia):** o painel fica aberto, sem login — conveniente em desenvolvimento. Em produção sem senha, um aviso é registrado no log.
 
+Proteções do login e da sessão:
+
+- **`SECRET_KEY` forte em produção:** o app recusa subir com placeholder ou chave com menos de 32 caracteres, já que quem conhece a chave assina um cookie "autenticado" sem saber a senha. Gere uma localmente com `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+- **Força-bruta:** o `POST /login` é limitado por IP (`RATELIMIT_LOGIN`, padrão `10 per minute`).
+- **Sessão com validade:** o login expira após `SESSION_LIFETIME_HOURS` (padrão 12h).
+- **Cookie:** `HttpOnly`, `SameSite=Lax` e `Secure` (padrão em produção; `SESSION_COOKIE_SECURE=false` só para HTTP local).
+- **Redirect pós-login:** o parâmetro `next` só aceita caminhos locais (`//host`, `/\host` e esquemas externos são descartados).
+
 A API (`/api/...`) **não** é afetada por essa autenticação: ela tem seu próprio contrato de ingestão de feedbacks.
 
 ### Executando com Docker
 
 O projeto inclui um `Dockerfile` (gunicorn servindo `wsgi:app`) e um `docker-compose.yml` que sobe a aplicação junto de um PostgreSQL.
+
+O compose exige uma `SECRET_KEY` aleatória (32+ caracteres) e falha logo no `up` sem ela; defina-a no `.env` ou no shell (ex.: `$env:SECRET_KEY = python -c "import secrets; print(secrets.token_urlsafe(48))"` no PowerShell). Como ele serve HTTP em `localhost`, o compose desliga o cookie `Secure` por padrão (`SESSION_COOKIE_SECURE=false`).
 
 ```bash
 # A OPENAI_API_KEY e obrigatoria em producao (FLASK_ENV=production)
@@ -215,6 +225,8 @@ docker compose exec web python -c "from app import create_app, db; app=create_ap
 **Rate limiting:** este endpoint público é limitado (padrão `30 per minute` por IP) via [Flask-Limiter](https://flask-limiter.readthedocs.io/). Ao exceder o limite a resposta é `429 Too Many Requests` com corpo JSON. Configurável por `RATELIMIT_INGEST`, `RATELIMIT_ENABLED` e `RATELIMIT_STORAGE_URI` (use `redis://...` em produção com múltiplos workers; o default `memory://` serve a um único processo). Os endpoints `GET` não são limitados.
 
 **CORS:** as rotas `/api/*` têm CORS habilitado (via [Flask-CORS](https://flask-cors.readthedocs.io/)) para consumo por um frontend/cliente de outra origem. As origens permitidas são configuráveis por `CORS_ORIGINS` (lista separada por vírgula; default `*`). As rotas web do dashboard não expõem CORS.
+
+**Validação:** o corpo precisa ser um objeto JSON com `id` (UUID) e `feedback` (texto não vazio, até `MAX_FEEDBACK_CHARS` caracteres, padrão `5000`); qualquer violação responde `400` com corpo JSON. Corpos acima de `MAX_CONTENT_LENGTH` (padrão 1 MB) recebem `413`, e um `id` já existente recebe `409`, inclusive quando duas requisições com o mesmo id chegam ao mesmo tempo.
 
 ### Listar Feedbacks
 

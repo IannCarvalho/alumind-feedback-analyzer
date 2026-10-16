@@ -2,9 +2,10 @@ import uuid
 import logging
 from flask import Blueprint, request, jsonify, current_app
 from typing import Dict, Any
+from sqlalchemy.exc import IntegrityError
 from app import db
 from app.extensions import limiter
-from app.models.feedback import Feedback, RequestedFeature
+from app.models.feedback import FEATURE_CODE_MAX_LENGTH, Feedback, RequestedFeature
 from app.services.feedback_analyzer import FeedbackAnalyzer
 from app.services.feedback_service import FeedbackService
 
@@ -26,7 +27,11 @@ def validate_feedback_request() -> Dict[str, Any]:
     if not request.is_json:
         raise ValueError('Request must be valid JSON')
 
-    data = request.get_json()
+    # silent=True: JSON inválido vira None e cai no 400 JSON abaixo, em vez
+    # do 400 em HTML do Werkzeug. null/lista/número também não são objetos.
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise ValueError('Request body must be a JSON object')
 
     if 'id' not in data or 'feedback' not in data:
         raise ValueError('Fields "id" and "feedback" are required')
@@ -38,8 +43,18 @@ def validate_feedback_request() -> Dict[str, Any]:
     except (ValueError, AttributeError, TypeError):
         raise ValueError('Field "id" must be a valid UUID') from None
 
-    if not str(data['feedback']).strip():
+    feedback = data['feedback']
+    if not isinstance(feedback, str):
+        raise ValueError('Field "feedback" must be a string')
+
+    if not feedback.strip():
         raise ValueError('Field "feedback" must not be empty')
+
+    # Teto de tamanho: o texto vai inteiro para a LLM (custo por token).
+    max_chars = current_app.config.get('MAX_FEEDBACK_CHARS', 5000)
+    if len(feedback) > max_chars:
+        raise ValueError(
+            f'Field "feedback" must have at most {max_chars} characters')
 
     return data
 
@@ -86,7 +101,9 @@ def analyze_feedback():
     # Add requested features
     for feature in requested_features:
         requested_feature = RequestedFeature(
-            code=feature['code'],
+            # A coluna é VARCHAR(50): no Postgres um código maior derruba o
+            # INSERT inteiro, então o limite é garantido aqui, na fronteira.
+            code=str(feature['code'])[:FEATURE_CODE_MAX_LENGTH],
             reason=feature['reason'],
             feedback=feedback
         )
@@ -94,7 +111,13 @@ def analyze_feedback():
 
     # Save to database
     db.session.add(feedback)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Duas requisições com o mesmo id passam juntas pela checagem acima;
+        # a PK decide no commit, e o perdedor recebe o mesmo 409.
+        db.session.rollback()
+        return jsonify({'error': 'Feedback with this ID already exists'}), 409
 
     # Return result
     return jsonify({

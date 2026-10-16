@@ -1,3 +1,5 @@
+import uuid
+
 from flask import Blueprint, render_template, request, redirect, url_for, abort
 from app.auth import login_required
 from app.services.statistics_service import Statistics
@@ -40,6 +42,12 @@ def feedback_detail(feedback_id: str):
     Args:
         feedback_id: UUID of the feedback to display
     """
+    # Um id malformado estoura no bind do UUID (500); para o usuário é só
+    # um feedback que não existe.
+    try:
+        uuid.UUID(feedback_id)
+    except ValueError:
+        abort(404)
     feedback = FeedbackService.get_feedback_by_id(feedback_id)
     if not feedback:
         abort(404)

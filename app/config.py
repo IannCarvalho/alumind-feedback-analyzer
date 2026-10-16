@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from typing import List, Optional
 from dotenv import load_dotenv
 
@@ -54,6 +55,24 @@ class Config:
     # Senha de acesso ao dashboard (rotas web). Se vazia, o dashboard
     # fica aberto (comportamento histórico, útil em desenvolvimento).
     DASHBOARD_PASSWORD: Optional[str] = os.environ.get('DASHBOARD_PASSWORD')
+
+    # Cookie de sessão do dashboard. HttpOnly impede leitura por JS e
+    # SameSite=Lax corta CSRF cross-site nos POSTs do painel. Secure (só
+    # HTTPS) liga por padrão em produção; desligue apenas em HTTP local.
+    SESSION_COOKIE_HTTPONLY: bool = True
+    SESSION_COOKIE_SAMESITE: str = os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax')
+    SESSION_COOKIE_SECURE: bool = get_env_bool(
+        'SESSION_COOKIE_SECURE', FLASK_ENV == 'production')
+    # Validade do login no painel. Sem isso, um cookie assinado vale 31 dias.
+    PERMANENT_SESSION_LIFETIME: timedelta = timedelta(
+        hours=get_env_int('SESSION_LIFETIME_HOURS', 12))
+    # Tentativas de login por IP (anti força-bruta da senha compartilhada).
+    RATELIMIT_LOGIN: str = os.environ.get('RATELIMIT_LOGIN', '10 per minute')
+
+    # Limites de entrada: corpo da requisição (bytes, o Flask responde 413) e
+    # tamanho do texto de um feedback (cada caractere vira token pago na LLM).
+    MAX_CONTENT_LENGTH: int = get_env_int('MAX_CONTENT_LENGTH', 1024 * 1024)
+    MAX_FEEDBACK_CHARS: int = get_env_int('MAX_FEEDBACK_CHARS', 5000)
 
     # SQLAlchemy configuration
     SQLALCHEMY_DATABASE_URI: str = os.environ.get(
