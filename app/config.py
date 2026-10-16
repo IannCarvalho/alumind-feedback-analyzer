@@ -96,6 +96,15 @@ class Config:
 
     # Email recipients for weekly summary
     EMAIL_RECIPIENTS: List[str] = get_env_list('EMAIL_RECIPIENTS')
+    # Timeout (s) da conexão SMTP: sem ele, um servidor mudo trava o job.
+    EMAIL_TIMEOUT: int = get_env_int('EMAIL_TIMEOUT', 30)
+    # URL pública do painel, usada no link do e-mail (vazia = e-mail sem link).
+    APP_BASE_URL: str = os.environ.get('APP_BASE_URL', '').rstrip('/')
+
+    # Agendador do resumo semanal. Opt-in porque deve existir UM por deploy:
+    # cada processo que o iniciasse mandaria o e-mail de novo (app/scheduling.py).
+    SCHEDULER_ENABLED: bool = get_env_bool('SCHEDULER_ENABLED', False)
+    SCHEDULER_TIMEZONE: str = os.environ.get('SCHEDULER_TIMEZONE', 'America/Sao_Paulo')
 
     # Rate limiting (Flask-Limiter)
     # Liga/desliga o limitador globalmente (desligado nos testes).
