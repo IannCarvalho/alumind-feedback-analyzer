@@ -57,7 +57,7 @@ def validate_config(config: Type[Config]) -> None:
             'Using default secret key. This is not secure for production.')
 
     # Check LLM configuration (BYOK: no server key is required)
-    from app.llm import validate_llm_config
+    from app.llm import PROVIDERS, validate_llm_config
     validate_llm_config(config)
 
     # Check email configuration if in production
@@ -82,6 +82,20 @@ def validate_config(config: Type[Config]) -> None:
         logger.warning(
             'Nem DASHBOARD_PASSWORD nem API_READ_TOKEN estão definidos: '
             'GET /api/feedbacks está público.')
+
+    # Chaves de ingestão: cada uma é a única barreira contra gasto de LLM.
+    from app.ingest_auth import MIN_INGEST_KEY_LENGTH
+    for ingest_key in config.INGEST_API_KEYS:
+        if len(ingest_key) < MIN_INGEST_KEY_LENGTH:
+            raise ValueError(
+                f'INGEST_API_KEY muito curta: use pelo menos {MIN_INGEST_KEY_LENGTH} '
+                'caracteres (ex.: python -c "import secrets; print(secrets.token_urlsafe(32))").')
+    server_pays = any(
+        getattr(config, provider.env_key, None) for provider in PROVIDERS.values())
+    if config.is_production() and server_pays and not config.INGEST_API_KEYS:
+        logger.warning(
+            'INGEST_API_KEY não está definida e há chave de LLM no servidor: '
+            'POST /api/feedbacks está aberto e qualquer um gasta a sua cota.')
 
 
 def init_extensions(app: Flask) -> None:

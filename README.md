@@ -216,6 +216,13 @@ docker compose exec web flask db upgrade
 
 **Descrição:** Recebe e analisa um feedback, classificando-o por sentimento, detectando spam e identificando funcionalidades solicitadas.
 
+**Chave de ingestão:** com `INGEST_API_KEY` definida, este endpoint exige o header `X-API-Key: <chave>` e responde `401 ingest_key_required` **antes** de ler o corpo ou chamar qualquer LLM, então quem não tem chave não gasta nem grava nada. As tentativas sem chave contam no rate limit. Sem `INGEST_API_KEY` ele continua aberto (dev), com aviso no log em produção se houver chave de LLM no servidor, porque assim qualquer um gasta a cota do operador.
+
+- A chave tem no mínimo 24 caracteres (`python -c "import secrets; print(secrets.token_urlsafe(32))"`) e só é lida do header `X-API-Key` (nunca da query string nem do corpo).
+- Para **rotacionar** sem downtime, liste duas separadas por vírgula (`INGEST_API_KEY=nova,antiga`), troque os clientes e remova a antiga.
+- Use a chave de **servidor para servidor**. Não a embuta no JavaScript de um site público: quem abre o site a lê. Para um formulário público, receba no seu backend e reenvie com a chave.
+- `INGEST_ALLOW_BYOK_WITHOUT_KEY=true` (padrão `false`) abre uma exceção para demos: quem trouxer a **própria** chave de LLM (`X-LLM-Provider` + `X-LLM-Api-Key`) é aceito sem chave de ingestão e paga a chamada, nunca a do servidor. O feedback ainda é gravado no seu banco.
+
 **Corpo da Requisição:**
 ```json
 {
@@ -253,11 +260,12 @@ docker compose exec web flask db upgrade
 ```bash
 curl -X POST https://seu-host/api/feedbacks \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $INGEST_API_KEY" \
   -H "X-LLM-Provider: anthropic" -H "X-LLM-Api-Key: $ANTHROPIC_API_KEY" \
   -d '{"id": "550e8400-e29b-41d4-a716-446655440000", "feedback": "Adoro o app, mas falta modo escuro."}'
 ```
 
-**Erros da análise:** `503 llm_not_configured` (nenhuma chave no servidor e nenhum BYOK enviado), `400 invalid_byok_headers` (provedor fora da lista, modelo ou chave malformados), `403` (BYOK desligado com `BYOK_REQUEST_KEYS_ENABLED=false`), `422 llm_auth_failed` (o provedor recusou a chave enviada) e `502 llm_request_failed` (falha do provedor com a chave enviada).
+**Erros da análise:** `401 ingest_key_required` (chave de ingestão ausente ou inválida), `503 llm_not_configured` (nenhuma chave no servidor e nenhum BYOK enviado), `400 invalid_byok_headers` (provedor fora da lista, modelo ou chave malformados), `403` (BYOK desligado com `BYOK_REQUEST_KEYS_ENABLED=false`), `422 llm_auth_failed` (o provedor recusou a chave enviada) e `502 llm_request_failed` (falha do provedor com a chave enviada).
 
 **Rate limiting:** este endpoint público é limitado (padrão `30 per minute` por IP) via [Flask-Limiter](https://flask-limiter.readthedocs.io/). Ao exceder o limite a resposta é `429 Too Many Requests` com corpo JSON. Configurável por `RATELIMIT_INGEST`, `RATELIMIT_ENABLED` e `RATELIMIT_STORAGE_URI` (use `redis://...` em produção com múltiplos workers; o default `memory://` serve a um único processo). Os endpoints `GET` não são limitados.
 

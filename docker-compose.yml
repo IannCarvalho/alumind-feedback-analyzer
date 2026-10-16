@@ -30,6 +30,12 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Acesso: senha do painel, token de leitura da API, chave de ingestao e
+      # chave do cofre de provedores. Vazias = recurso desligado/aberto (dev).
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
+      API_READ_TOKEN: ${API_READ_TOKEN:-}
+      INGEST_API_KEY: ${INGEST_API_KEY:-}
+      FEEDLENS_ENCRYPTION_KEY: ${FEEDLENS_ENCRYPTION_KEY:-}
       LLM_MODELS: ${LLM_MODELS:-}
       EMAIL_HOST: ${EMAIL_HOST:-}
       EMAIL_PORT: ${EMAIL_PORT:-587}

@@ -13,6 +13,9 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 # partir do config (lido do ambiente), então precisa estar definido aqui,
 # antes de qualquer import do app, e não após create_app().
 os.environ.setdefault("RATELIMIT_ENABLED", "false")
+# Um INGEST_API_KEY do .env de quem desenvolve fecharia a ingestão em todos os
+# testes; vazio = aberto. Os testes da chave a definem explicitamente.
+os.environ.setdefault("INGEST_API_KEY", "")
 
 import pytest
 

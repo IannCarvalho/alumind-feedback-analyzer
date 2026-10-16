@@ -60,6 +60,16 @@ class Config:
     # ou este token definidos, a leitura exige credencial; sem nenhum dos
     # dois a API continua aberta (dev). Frontend da mesma origem usa a sessão.
     API_READ_TOKEN: Optional[str] = os.environ.get('API_READ_TOKEN')
+    # Chave de ingestão (POST /api/feedbacks): quem envia feedbacks manda
+    # "X-API-Key: <chave>". Aceita várias separadas por vírgula (rotação sem
+    # downtime). Definida, TODO POST exige uma chave válida; vazia, a ingestão
+    # fica aberta (comportamento antigo), e com chave de LLM no servidor isso
+    # deixa qualquer um gastar a cota do operador.
+    INGEST_API_KEYS: List[str] = get_env_list('INGEST_API_KEY')
+    # Exceção opcional para demos públicas: aceita sem chave de ingestão quem
+    # trouxer a PRÓPRIA chave de LLM (headers X-LLM-*), já que paga a chamada.
+    # Continua gravando no seu banco, então só ligue se aceitar esse volume.
+    INGEST_ALLOW_BYOK_WITHOUT_KEY: bool = get_env_bool('INGEST_ALLOW_BYOK_WITHOUT_KEY', False)
 
     # Cookie de sessão do dashboard. HttpOnly impede leitura por JS e
     # SameSite=Lax corta CSRF cross-site nos POSTs do painel. Secure (só
