@@ -1,7 +1,7 @@
 # Estágio 1: compila o front Vue (Vite). Só o resultado estático segue para a
 # imagem final; Node e node_modules ficam neste estágio.
-# Node 20, a mesma versão do job "frontend" do CI.
-FROM node:20-slim AS frontend
+# Node 22, a mesma versão do job "frontend" do CI.
+FROM node:22-slim AS frontend
 
 WORKDIR /build/frontend
 
