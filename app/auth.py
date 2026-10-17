@@ -27,7 +27,7 @@ from flask import (
     url_for,
 )
 
-from app.csrf import csrf_is_valid, csrf_protect, rotate_csrf_token
+from app.csrf import csrf_is_valid, rotate_csrf_token
 from app.extensions import limiter
 
 auth = Blueprint('auth', __name__)
@@ -164,9 +164,16 @@ def login():
     return render_template('login.html')
 
 
-@auth.route('/logout', methods=['POST'])
-@csrf_protect
+@auth.route('/logout', methods=['GET', 'POST'])
 def logout():
-    """Encerra a sessão do dashboard."""
+    """Encerra a sessão do painel e volta para o login.
+
+    Sem CSRF de propósito: logout é idempotente e seguro — o pior que um
+    "logout forjado" faria é deslogar a própria vítima, sem ler nem alterar
+    dado nenhum. Em troca, nunca mostramos a tela crua de 400: digitar
+    /logout na barra (GET) ou um POST sem token válido (sessão expirada,
+    servidor reiniciado com SECRET_KEY nova) sempre resulta em sair e ser
+    redirecionado, que é exatamente o que o usuário quer ao clicar em Sair.
+    """
     session.clear()
     return redirect(url_for('auth.login'))

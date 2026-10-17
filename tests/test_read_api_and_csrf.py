@@ -159,17 +159,23 @@ def test_login_rotates_the_csrf_token(build):
     assert login(client, PASSWORD).status_code == 302
     after = csrf_token(client)
     assert after != before
-    # O token de antes do login não vale mais para nada.
-    assert client.post("/logout", data={"csrf_token": before}).status_code == 400
     assert client.get("/dashboard").status_code == 200
 
 
-def test_logout_requires_the_csrf_token(build):
+def test_logout_is_csrf_free_and_always_logs_out(build):
+    """Logout é idempotente: sem token, com token ou por GET, sempre desloga
+    e redireciona (302) — nunca mostra a tela de 400."""
     client = build(DASHBOARD_PASSWORD=PASSWORD)
     login(client, PASSWORD)
-    assert client.post("/logout").status_code == 400
-    assert client.get("/dashboard").status_code == 200  # continua logado
-    assert post_form(client, "/logout").status_code == 302
+    assert client.post("/logout").status_code == 302  # sem token
+    assert client.get("/dashboard").status_code == 302  # deslogou
+
+    login(client, PASSWORD)
+    assert post_form(client, "/logout").status_code == 302  # com token
+    assert client.get("/dashboard").status_code == 302
+
+    login(client, PASSWORD)
+    assert client.get("/logout").status_code == 302  # por GET
     assert client.get("/dashboard").status_code == 302
 
 

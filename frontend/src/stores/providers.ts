@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-import { http, setCsrfToken } from '@/lib/http'
+import { http, setCsrfToken, HttpError } from '@/lib/http'
 import type {
   ProviderCatalogEntry,
   ProviderCredential,
@@ -17,6 +17,9 @@ const BASE = '/api/settings/providers'
  */
 export const useProvidersStore = defineStore('providers', () => {
   const vaultEnabled = ref(false)
+  // Gerenciamento ligado = há DASHBOARD_PASSWORD no servidor. Sem ela o GET
+  // responde 403 auth_not_configured e nenhum dado vem (nem a cadeia).
+  const manageEnabled = ref(true)
   const catalog = ref<ProviderCatalogEntry[]>([])
   const environmentChain = ref<string[]>([])
   const credentials = ref<ProviderCredential[]>([])
@@ -28,11 +31,22 @@ export const useProvidersStore = defineStore('providers', () => {
     try {
       const data = await http.get<ProvidersResponse>(BASE)
       setCsrfToken(data.csrf_token)
+      manageEnabled.value = true
       vaultEnabled.value = data.vault_enabled
       catalog.value = data.catalog
       environmentChain.value = data.environment_chain
       credentials.value = data.providers
       loaded.value = true
+    } catch (e) {
+      // Sem DASHBOARD_PASSWORD o painel fica aberto e a API de chaves recusa
+      // por design: não é erro, é "gerenciamento desligado". Trata como estado,
+      // não como falha, para a tela não gritar um alarme vermelho em dev/local.
+      if (e instanceof HttpError && e.code === 'auth_not_configured') {
+        manageEnabled.value = false
+        loaded.value = true
+        return
+      }
+      throw e
     } finally {
       loading.value = false
     }
@@ -81,6 +95,7 @@ export const useProvidersStore = defineStore('providers', () => {
 
   return {
     vaultEnabled,
+    manageEnabled,
     catalog,
     environmentChain,
     credentials,

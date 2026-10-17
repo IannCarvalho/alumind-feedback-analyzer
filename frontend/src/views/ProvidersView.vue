@@ -119,7 +119,7 @@ onMounted(async () => {
   <section class="fl-page">
     <header class="fl-page__head">
       <div>
-        <h1>Provedores de IA <span class="fl-byok">· traga sua chave</span></h1>
+        <h1>Provedores de IA</h1>
         <p class="fl-muted">
           Ordene os provedores que analisam os feedbacks. A chave principal é tentada
           primeiro; as demais entram como reserva.
@@ -141,7 +141,17 @@ onMounted(async () => {
       <Message v-if="error" severity="error" :closable="true">{{ error }}</Message>
       <Message v-if="notice" severity="success" :closable="true">{{ notice }}</Message>
 
-      <Message v-if="!store.vaultEnabled" severity="info" :closable="false">
+      <Message v-if="!store.manageEnabled" severity="info" :closable="false">
+        Gerenciamento de chaves desligado neste ambiente (defina
+        <code>DASHBOARD_PASSWORD</code> no servidor para cadastrar e testar chaves).
+        A análise usa as chaves do ambiente, abaixo.
+      </Message>
+
+      <Message
+        v-if="store.manageEnabled && !store.vaultEnabled"
+        severity="info"
+        :closable="false"
+      >
         O cofre de chaves está desligado (defina <code>FEEDLENS_ENCRYPTION_KEY</code>).
         A análise usa apenas as chaves do ambiente, listadas abaixo.
       </Message>
@@ -293,11 +303,6 @@ onMounted(async () => {
 .fl-page__head h1 {
   margin: 0 0 0.25rem;
   font-size: 1.5rem;
-}
-.fl-byok {
-  color: var(--fl-text-muted);
-  font-weight: 400;
-  font-size: 1rem;
 }
 .fl-muted {
   color: var(--fl-text-muted);
