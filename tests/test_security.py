@@ -52,7 +52,7 @@ def test_login_never_redirects_off_site(secured_client, target):
     resp = post_form(
         secured_client, f"/login?{urlencode({'next': target})}", {"password": "segredo"})
     assert resp.status_code == 302
-    assert resp.headers["Location"] == "/dashboard"
+    assert resp.headers["Location"] == "/"
 
 
 def test_login_keeps_local_next_with_query(secured_client):

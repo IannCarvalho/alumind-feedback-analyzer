@@ -177,7 +177,7 @@ def test_static_email_links_dashboard_only_with_base_url():
         with_url = email_service.generate_email_content(STATS)
 
     assert "<a " not in without_url
-    assert 'href="https://feedlens.example.com/dashboard"' in with_url
+    assert 'href="https://feedlens.example.com/"' in with_url
 
 
 # --- SMTP ---------------------------------------------------------------------------

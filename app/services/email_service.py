@@ -120,7 +120,7 @@ def generate_email_content(stats):
 
     dashboard_html = ""
     if Config.APP_BASE_URL:
-        dashboard_url = html.escape(f"{Config.APP_BASE_URL}/dashboard", quote=True)
+        dashboard_url = html.escape(f"{Config.APP_BASE_URL}/", quote=True)
         dashboard_html = f'<p>Para acessar o dashboard completo, visite <a href="{dashboard_url}">o painel</a>.</p>'
 
     # Prepare complete email

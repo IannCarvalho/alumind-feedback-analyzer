@@ -61,14 +61,6 @@ def test_api_listing_query_count_does_not_grow_with_page_size(client):
     assert len(statements) <= 3
 
 
-def test_web_listing_query_count_does_not_grow_with_page_size(client):
-    _seed(total=20)
-    with count_queries() as statements:
-        resp = client.get("/feedbacks")
-    assert resp.status_code == 200
-    assert len(statements) <= 3
-
-
 def test_dashboard_statistics_use_two_queries(app):
     _seed(total=9, spam=2)
     with count_queries() as statements:

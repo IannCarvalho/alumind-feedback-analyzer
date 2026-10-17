@@ -26,9 +26,10 @@ def secured_client():
 
 
 def test_dashboard_open_when_no_password(client):
-    """Sem senha configurada, o dashboard responde sem redirecionar."""
+    """Sem senha, a URL antiga /dashboard redireciona ao painel SPA (não bloqueia)."""
     resp = client.get("/dashboard")
-    assert resp.status_code == 200
+    assert resp.status_code == 301
+    assert resp.headers["Location"].endswith("/")
 
 
 def test_dashboard_redirects_to_login_when_secured(secured_client):
@@ -39,11 +40,11 @@ def test_dashboard_redirects_to_login_when_secured(secured_client):
 
 
 def test_login_with_correct_password_grants_access(secured_client):
-    """Senha correta autentica e dá acesso ao dashboard."""
+    """Senha correta autentica e dá acesso ao painel (a URL antiga redireciona)."""
     resp = login(secured_client, "segredo", follow_redirects=False)
     assert resp.status_code == 302
-    # Depois do login, o dashboard responde 200.
-    assert secured_client.get("/dashboard").status_code == 200
+    # Autenticado, /dashboard deixa de bloquear e redireciona ao painel SPA.
+    assert secured_client.get("/dashboard").status_code == 301
 
 
 def test_login_with_wrong_password_is_rejected(secured_client):
@@ -58,20 +59,20 @@ def test_login_with_wrong_password_is_rejected(secured_client):
 def test_logout_clears_session(secured_client):
     """Logout encerra a sessão e volta a bloquear o dashboard."""
     login(secured_client, "segredo")
-    assert secured_client.get("/dashboard").status_code == 200
+    assert secured_client.get("/dashboard").status_code == 301  # logado: redireciona ao SPA
 
     post_form(secured_client, "/logout")
-    assert secured_client.get("/dashboard").status_code == 302
+    assert secured_client.get("/dashboard").status_code == 302  # deslogado: vai ao login
 
 
 def test_logout_get_also_logs_out(secured_client):
     """GET /logout (URL na barra) desloga e redireciona, sem tela de 400."""
     login(secured_client, "segredo")
-    assert secured_client.get("/dashboard").status_code == 200
+    assert secured_client.get("/dashboard").status_code == 301  # logado
 
     resp = secured_client.get("/logout", follow_redirects=False)
     assert resp.status_code == 302
-    # Deslogou: o dashboard volta a bloquear.
+    # Deslogou: o dashboard volta a bloquear (redireciona ao login).
     assert secured_client.get("/dashboard").status_code == 302
 
 
@@ -79,7 +80,7 @@ def test_logout_without_csrf_still_logs_out(secured_client):
     """POST /logout sem token (sessão expirada/servidor reiniciado) nunca
     mostra 400: desloga mesmo assim e redireciona."""
     login(secured_client, "segredo")
-    assert secured_client.get("/dashboard").status_code == 200
+    assert secured_client.get("/dashboard").status_code == 301  # logado
 
     resp = secured_client.post("/logout")  # sem csrf_token
     assert resp.status_code == 302

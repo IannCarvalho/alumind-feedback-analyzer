@@ -1,12 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 /*
- * Rotas do painel. As telas completas chegam nos próximos PRs; neste andaime
- * só o Dashboard (placeholder) e a rota do cofre de provedores existem, para
- * provar a arquitetura (router + layout + base /static/spa/).
+ * Rotas do painel. O SPA é o painel padrão, servido na raiz pelo Flask
+ * (history base '/'); os assets saem de /static/spa/ (Vite `base`).
  */
 const router = createRouter({
-  history: createWebHistory('/app/'),
+  history: createWebHistory('/'),
   routes: [
     {
       path: '/',

@@ -100,7 +100,7 @@ def test_password_and_token_both_work_when_both_are_set(build):
 def test_only_a_token_does_not_turn_every_visitor_into_a_session_user(build):
     """Com só o token, 'sem auth no painel' não pode virar acesso à API."""
     client = build(DASHBOARD_PASSWORD=None, API_READ_TOKEN=TOKEN)
-    assert client.get("/dashboard").status_code == 200  # painel aberto, como antes
+    assert client.get("/dashboard").status_code == 301  # painel aberto -> redireciona ao SPA
     assert client.get("/api/feedbacks").status_code == 401
 
 
@@ -159,7 +159,7 @@ def test_login_rotates_the_csrf_token(build):
     assert login(client, PASSWORD).status_code == 302
     after = csrf_token(client)
     assert after != before
-    assert client.get("/dashboard").status_code == 200
+    assert client.get("/dashboard").status_code == 301
 
 
 def test_logout_is_csrf_free_and_always_logs_out(build):
@@ -181,9 +181,11 @@ def test_logout_is_csrf_free_and_always_logs_out(build):
 
 def test_forms_render_the_hidden_token(build):
     client = build(DASHBOARD_PASSWORD=PASSWORD)
+    # A página de login (server-rendered) carrega o campo oculto.
     assert 'name="csrf_token"' in client.get("/login").get_data(as_text=True)
+    # Logado, o painel é SPA: o token vem da API de settings, não de um form.
     login(client, PASSWORD)
-    assert 'name="csrf_token"' in client.get("/dashboard").get_data(as_text=True)
+    assert client.get("/api/settings/providers").get_json()["csrf_token"]
 
 
 def test_login_page_and_other_safe_requests_need_no_token(build):
