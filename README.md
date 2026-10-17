@@ -24,32 +24,33 @@ A aplicação é responsável por:
 
 ```
 feedlens/
-├── app/                           # Diretório principal da aplicação
-│   ├── __init__.py                # Inicialização da aplicação Flask (app factory)
+├── app/                           # Aplicação Flask e API
+│   ├── __init__.py                # App factory e registro das extensões
+│   ├── auth.py                    # Sessão, login do painel e proteção de rotas
 │   ├── config.py                  # Configurações da aplicação
-│   ├── models/                    # Modelos de dados
-│   │   └── feedback.py            # Modelos Feedback e RequestedFeature
-│   ├── routes/                    # Rotas da aplicação
-│   │   ├── api.py                 # Endpoints da API REST
-│   │   └── web.py                 # Rotas da interface web
-│   ├── services/                  # Serviços da aplicação
-│   │   ├── email_service.py       # Envio de e-mails (resumo semanal)
-│   │   ├── feedback_analyzer.py   # Análise de feedback com LLM
-│   │   ├── feedback_service.py    # Gerenciamento de feedbacks
-│   │   └── statistics_service.py  # Cálculo de estatísticas
-│   └── templates/                 # Templates HTML
-│       ├── base.html              # Template base
-│       ├── dashboard.html         # Dashboard principal
-│       ├── feedback_detail.html   # Detalhes de um feedback
-│       └── feedback_list.html     # Lista de feedbacks
+│   ├── csrf.py                    # Tokens CSRF da sessão
+│   ├── models/                    # Modelos SQLAlchemy
+│   ├── routes/
+│   │   ├── api.py                 # Endpoints REST de ingestão, leitura e BYOK
+│   │   ├── spa.py                 # Entrega do build Vue e deep-links
+│   │   └── web.py                 # Compatibilidade das URLs antigas
+│   └── services/                  # Análise, estatísticas, e-mail e feedbacks
+├── frontend/                      # SPA Vue 3 + Vite + TypeScript
+│   ├── src/components/            # Logo, gráficos e componentes reutilizáveis
+│   ├── src/lib/                   # Cliente HTTP e utilitários
+│   ├── src/stores/                # Estado Pinia (feedbacks, provedores, sessão)
+│   ├── src/views/                 # Dashboard, feedbacks, provedores e login
+│   └── src/router/                # Rotas do painel e tela pública de login
 ├── migrations/                    # Migrações de banco de dados (Alembic)
 ├── .env-example                   # Exemplo de variáveis de ambiente
-├── .gitignore                     # Arquivos ignorados pelo Git
+├── Dockerfile                     # Build multi-stage do front e da aplicação
 ├── README.md                      # Este arquivo
-├── requirements.txt               # Dependências do projeto
-├── run.py                         # Ponto de entrada da aplicação
-└── test_email.py                  # Script para testar o envio de e-mail
+├── requirements.txt               # Dependências Python
+├── run.py                         # Ponto de entrada de desenvolvimento
+└── wsgi.py                        # Entrada WSGI para produção
 ```
+
+O Flask serve o `frontend/dist` gerado pelo Vite em `app/static/spa/`. O painel é uma SPA: o navegador recebe o mesmo `index.html` na raiz e nos deep-links, e o Vue Router decide qual tela exibir. A API continua no Flask, sob `/api/...`.
 
 ## Tecnologias Utilizadas
 
@@ -69,10 +70,10 @@ feedlens/
   - Pydantic (validação da saída do modelo) e [nh3](https://nh3.readthedocs.io/) (sanitização do HTML gerado para o e-mail)
 
 - **Frontend:**
-  - HTML, CSS, JavaScript
-  - Bootstrap 5 (framework CSS)
-  - Chart.js (visualização de dados)
-  - Font Awesome (ícones)
+  - Vue 3 com Composition API
+  - Vite e TypeScript
+  - PrimeVue e PrimeIcons (componentes e ícones)
+  - Pinia (estado), Vue Router (navegação) e Chart.js (gráficos)
 
 - **Envio de E-mail:**
   - SMTP (via `smtplib` do Python)
@@ -400,29 +401,19 @@ Ao salvar ou trocar uma chave, o app a testa antes (`verify`, padrão `true`): s
 
 ## Interface Web
 
-### Dashboard (`/` ou `/dashboard`)
+O painel é uma SPA Vue 3 servida pelo Flask na raiz. A navegação acontece no Vue Router, e um reload em qualquer deep-link continua funcionando porque o Flask entrega o `index.html` do build. A interface usa PrimeVue, PrimeIcons, Pinia e Chart.js.
 
-O dashboard principal exibe:
-- Contagem total de feedbacks
-- Porcentagem de feedbacks positivos e negativos
-- Gráficos de distribuição de sentimento
-- Lista das funcionalidades mais solicitadas
-- Feedbacks recentes
+### Rotas do painel
 
-### Lista de Feedbacks (`/feedbacks`)
+- **Visão geral (`/`):** contagem e indicadores, distribuição de sentimentos, funcionalidades mais solicitadas e feedbacks recentes.
+- **Feedbacks (`/feedbacks`):** tabela paginada com filtro por sentimento e navegação para o detalhe.
+- **Detalhe (`/feedbacks/<id>`):** texto original, sentimento, status de spam e funcionalidades identificadas.
+- **Provedores (`/providers`):** cadeia de provedores, cadastro e teste de chaves no cofre BYOK, habilitação, remoção e reordenação.
+- **Login (`/login`):** tela pública do próprio SPA; a senha é validada pelo Flask e a sessão usa cookie assinado.
 
-Página com a lista completa de feedbacks, incluindo:
-- Filtros por sentimento
-- Paginação
-- Links para visualizar detalhes de cada feedback
+As URLs antigas continuam compatíveis: `/dashboard` redireciona para `/`, e `/feedback/<id>` redireciona para `/feedbacks/<id>`. `/feedbacks` já é a rota canônica da lista e não deve redirecionar para si mesma.
 
-### Detalhes de Feedback (`/feedback/{id}`)
-
-Página com detalhes completos de um feedback específico:
-- Texto original do feedback
-- Classificação de sentimento
-- Status de spam
-- Funcionalidades identificadas
+Se o login estiver habilitado e a sessão expirar, o cliente detecta a resposta `401`, confirma o estado em `/auth/session` e leva a pessoa de volta ao login preservando a tela de destino. Sem `DASHBOARD_PASSWORD`, o painel permanece aberto em modo de desenvolvimento.
 
 ## Funcionalidade de E-mail
 
@@ -481,7 +472,7 @@ Cuidados de segurança:
 
 ## Possíveis Melhorias
 
-Já entregues: autenticação por senha no dashboard, suite de testes (pytest), CI (GitHub Actions), dockerização e resumo de e-mail gerado por LLM.
+Já entregues: autenticação por senha no dashboard, SPA Vue 3, cofre BYOK, suite de testes (pytest), CI (GitHub Actions), dockerização e resumo de e-mail gerado por LLM.
 
 Próximos passos possíveis:
 
@@ -489,7 +480,7 @@ Próximos passos possíveis:
 2. **Escalabilidade:** cache para consultas frequentes e fila de processamento para análises
 3. **Rate-limiting:** proteção do endpoint público de ingestão contra abuso
 4. **Monitoramento:** integração com logging/observabilidade e métricas de desempenho
-5. **Frontend:** evoluir para um frontend desacoplado baseado em componentes (ex: React)
+5. **Relatórios:** exportação de dados e indicadores em formatos como CSV e PDF
 
 ## Licença
 
