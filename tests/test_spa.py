@@ -27,10 +27,32 @@ def test_spa_serves_index_at_root_and_deeplinks(client, app, tmp_path):
     (spa_dir / 'index.html').write_text(
         '<!doctype html><title>FeedLens SPA</title>', encoding='utf-8')
 
-    for path in ('/', '/providers', '/feedbacks/abc-123'):
+    for path in ('/', '/providers', '/feedbacks', '/feedbacks?sentiment=NEGATIVO',
+                 '/feedbacks/abc-123'):
         resp = client.get(path)
         assert resp.status_code == 200, path
         assert b'FeedLens SPA' in resp.data, path
+
+
+def test_feedbacks_list_never_redirects_to_itself(client, app, tmp_path):
+    """Regressão: /feedbacks redirecionava 301 para /feedbacks (loop infinito no reload)."""
+    app.static_folder = str(tmp_path)
+    (tmp_path / 'spa').mkdir()
+    (tmp_path / 'spa' / 'index.html').write_text(
+        '<!doctype html><title>FeedLens SPA</title>', encoding='utf-8')
+
+    # follow_redirects levanta ClientRedirectError se houver loop.
+    resp = client.get('/feedbacks?sentiment=POSITIVO', follow_redirects=True)
+    assert resp.status_code == 200
+    assert not resp.history  # nenhum redirect: o SPA responde direto
+
+
+def test_feedbacks_list_still_requires_login(client, app, tmp_path):
+    app.static_folder = str(tmp_path)
+    app.config['DASHBOARD_PASSWORD'] = 'segredo-de-teste'
+    resp = client.get('/feedbacks', follow_redirects=False)
+    assert resp.status_code == 302
+    assert '/login' in resp.headers['Location']
 
 
 def test_spa_catch_all_does_not_swallow_reserved_paths(client, app, tmp_path):
