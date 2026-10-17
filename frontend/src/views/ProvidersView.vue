@@ -147,6 +147,7 @@ onMounted(async () => {
       </div>
       <Button
         v-if="store.vaultEnabled"
+        class="fl-add-key"
         label="Adicionar chave"
         icon="pi pi-plus"
         @click="openDialog"
@@ -321,6 +322,18 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 1rem;
   margin-bottom: 1.25rem;
+}
+.fl-add-key {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@media (max-width: 40rem) {
+  .fl-page__head {
+    flex-direction: column;
+  }
+  .fl-add-key {
+    align-self: flex-start;
+  }
 }
 .fl-page__head h1 {
   margin: 0 0 0.25rem;
