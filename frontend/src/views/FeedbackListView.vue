@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import DataTable, { type DataTablePageEvent } from 'primevue/datatable'
 import Column from 'primevue/column'
 import Select from 'primevue/select'
@@ -12,11 +12,22 @@ import { formatDate, sentimentMeta } from '@/lib/sentiment'
 import type { Feedback, Sentiment } from '@/types/api'
 
 const store = useFeedbacksStore()
+const route = useRoute()
 const router = useRouter()
 const error = ref<string | null>(null)
 const perPage = 20
 
-const sentimentFilter = ref<Sentiment | null>(null)
+const SENTIMENTS: readonly Sentiment[] = ['POSITIVO', 'NEGATIVO', 'INCONCLUSIVO']
+
+function sentimentFromUrl(): Sentiment | null {
+  const value = route.query.sentiment
+  return typeof value === 'string' && (SENTIMENTS as readonly string[]).includes(value)
+    ? (value as Sentiment)
+    : null
+}
+
+// O filtro vive na URL (?sentiment=), então links salvos e o reload o mantêm.
+const sentimentFilter = ref<Sentiment | null>(sentimentFromUrl())
 const sentimentOptions = [
   { label: 'Todos os sentimentos', value: null },
   { label: 'Positivo', value: 'POSITIVO' as const },
@@ -41,6 +52,7 @@ function onPage(event: DataTablePageEvent) {
 }
 
 function onFilterChange() {
+  router.replace({ query: sentimentFilter.value ? { sentiment: sentimentFilter.value } : {} })
   load(1)
 }
 

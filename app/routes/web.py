@@ -1,15 +1,21 @@
 """Compatibilidade das rotas de página antigas (Jinja), agora servidas pelo SPA.
 
 O painel virou um SPA Vue servido na raiz (ver ``app/routes/spa.py``). As URLs
-antigas renderizadas por Jinja (``/dashboard``, ``/feedbacks``,
-``/feedback/<id>``) continuam existindo como **redirects** para a rota
-equivalente do SPA, para não quebrar links salvos nem o link do e-mail do
-resumo semanal. Os dados são servidos pela API (``/api/...``); aqui não há
-mais render de template.
+antigas que mudaram de caminho continuam existindo como **redirects** para a
+rota equivalente do SPA, para não quebrar links salvos:
+
+- ``/dashboard`` -> ``/``
+- ``/feedback/<id>`` -> ``/feedbacks/<id>``
+
+``/feedbacks`` NÃO está aqui: é o mesmo caminho da lista no SPA, então quem o
+serve é o catch-all do SPA (com o filtro ``?sentiment=`` lido pela própria
+tela). Um redirect dele para ele mesmo seria um loop infinito. Os dados são
+servidos pela API (``/api/...``); aqui não há render de template.
 """
 import uuid
 
-from flask import Blueprint, redirect, request
+from flask import Blueprint, abort, redirect
+
 from app.auth import login_required
 
 web = Blueprint('web', __name__)
@@ -22,17 +28,6 @@ def dashboard():
     return redirect('/', code=301)
 
 
-@web.route('/feedbacks')
-@login_required
-def feedback_list():
-    """URL antiga da lista -> lista do SPA, preservando o filtro de sentimento."""
-    sentiment = request.args.get('sentiment')
-    target = '/feedbacks'
-    if sentiment:
-        target = f'/feedbacks?sentiment={sentiment}'
-    return redirect(target, code=301)
-
-
 @web.route('/feedback/<feedback_id>')
 @login_required
 def feedback_detail(feedback_id: str):
@@ -43,6 +38,5 @@ def feedback_detail(feedback_id: str):
     try:
         uuid.UUID(feedback_id)
     except ValueError:
-        from flask import abort
         abort(404)
     return redirect(f'/feedbacks/{feedback_id}', code=301)
