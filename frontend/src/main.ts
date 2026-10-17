@@ -24,4 +24,6 @@ app.use(PrimeVue, {
   },
 })
 
-app.mount('#app')
+// Monta depois de resolver a primeira rota: a tela de login não tem a barra
+// lateral, e montar antes faria o shell do painel piscar por um instante.
+router.isReady().then(() => app.mount('#app'))

@@ -66,6 +66,9 @@ def test_spa_catch_all_does_not_swallow_reserved_paths(client, app, tmp_path):
     # /health tem rota própria: responde o health, não o index.
     assert client.get('/health').status_code == 200
     assert b'FeedLens SPA' not in client.get('/health').data
+    # /auth/* é da sessão do painel: um caminho inexistente ali é 404, não o index.
+    assert client.get('/auth/session').is_json
+    assert client.get('/auth/nao-existe').status_code == 404
 
 
 def test_spa_behind_login(client, app, tmp_path):

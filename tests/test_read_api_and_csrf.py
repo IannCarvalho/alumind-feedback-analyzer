@@ -122,16 +122,17 @@ def test_short_read_token_refuses_to_boot():
 
 def test_login_without_csrf_token_is_rejected(build):
     client = build(DASHBOARD_PASSWORD=PASSWORD)
-    response = client.post("/login", data={"password": PASSWORD})
+    response = client.post("/login", json={"password": PASSWORD})
     assert response.status_code == 400
-    assert "expirou" in response.get_data(as_text=True)
+    assert response.get_json()["code"] == "csrf"
+    assert "expirou" in response.get_json()["error"]
     assert client.get("/dashboard").status_code == 302  # não autenticou
 
 
 def test_login_with_a_wrong_csrf_token_is_rejected(build):
     client = build(DASHBOARD_PASSWORD=PASSWORD)
     csrf_token(client)
-    response = client.post("/login", data={"password": PASSWORD, "csrf_token": "errado"})
+    response = login(client, PASSWORD, token="errado")
     assert response.status_code == 400
     assert client.get("/dashboard").status_code == 302
 
@@ -142,13 +143,13 @@ def test_a_token_from_another_session_is_rejected(build):
     victim = attacker.application.test_client()
     csrf_token(victim)  # a vítima só tem a sessão dela
     stolen = csrf_token(attacker)
-    response = victim.post("/login", data={"password": PASSWORD, "csrf_token": stolen})
+    response = login(victim, PASSWORD, token=stolen)
     assert response.status_code == 400
 
 
 def test_csrf_check_comes_before_the_password_check(build):
     client = build(DASHBOARD_PASSWORD=PASSWORD)
-    response = client.post("/login", data={"password": "errada"})
+    response = client.post("/login", json={"password": "errada"})
     assert response.status_code == 400
     assert "Senha incorreta" not in response.get_data(as_text=True)
 
@@ -156,7 +157,7 @@ def test_csrf_check_comes_before_the_password_check(build):
 def test_login_rotates_the_csrf_token(build):
     client = build(DASHBOARD_PASSWORD=PASSWORD)
     before = csrf_token(client)
-    assert login(client, PASSWORD).status_code == 302
+    assert login(client, PASSWORD).status_code == 200
     after = csrf_token(client)
     assert after != before
     assert client.get("/dashboard").status_code == 301
@@ -179,18 +180,25 @@ def test_logout_is_csrf_free_and_always_logs_out(build):
     assert client.get("/dashboard").status_code == 302
 
 
-def test_forms_render_the_hidden_token(build):
+def test_the_session_endpoint_hands_out_the_token_before_login(build):
+    """Antes do login o SPA pega o token em /auth/session (rota pública)."""
     client = build(DASHBOARD_PASSWORD=PASSWORD)
-    # A página de login (server-rendered) carrega o campo oculto.
-    assert 'name="csrf_token"' in client.get("/login").get_data(as_text=True)
-    # Logado, o painel é SPA: o token vem da API de settings, não de um form.
+    response = client.get("/auth/session")
+    assert response.status_code == 200
+    assert response.get_json()["csrf_token"]
+    # Logado, a API de settings devolve o mesmo token da sessão (já trocado no login).
     login(client, PASSWORD)
-    assert client.get("/api/settings/providers").get_json()["csrf_token"]
+    assert client.get("/api/settings/providers").get_json()["csrf_token"] == csrf_token(client)
 
 
-def test_login_page_and_other_safe_requests_need_no_token(build):
+def test_login_page_and_other_safe_requests_need_no_token(build, tmp_path):
     client = build(DASHBOARD_PASSWORD=PASSWORD)
+    # Build falso do SPA: o CI dos testes Python não compila o front.
+    client.application.static_folder = str(tmp_path)
+    (tmp_path / "spa").mkdir()
+    (tmp_path / "spa" / "index.html").write_text("<div id=\"app\"></div>", encoding="utf-8")
     assert client.get("/login").status_code == 200
+    assert client.get("/auth/session").status_code == 200
     assert client.get("/health").status_code == 200
 
 

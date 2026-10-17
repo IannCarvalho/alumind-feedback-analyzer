@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 
 import BrandLogo from '@/components/BrandLogo.vue'
+import { useSessionStore } from '@/stores/session'
 
 const route = useRoute()
+const session = useSessionStore()
 const isDark = ref(false)
+
+// Telas "nuas" (o login) não têm a barra lateral do painel.
+const bare = computed(() => route.meta.layout === 'bare')
 
 const nav = [
   { to: '/', label: 'Visão geral', icon: 'pi pi-chart-bar' },
@@ -33,11 +38,14 @@ onMounted(() => {
   const saved = localStorage.getItem('fl-theme')
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
   applyTheme(saved ? saved === 'dark' : prefersDark)
+  // Só decide se o botão Sair aparece; se falhar, ele fica escondido.
+  session.load().catch(() => undefined)
 })
 </script>
 
 <template>
-  <div class="fl-shell">
+  <RouterView v-if="bare" />
+  <div v-else class="fl-shell">
     <aside class="fl-sidebar">
       <div class="fl-brand">
         <BrandLogo :size="34" />
@@ -63,7 +71,7 @@ onMounted(() => {
           <i :class="isDark ? 'pi pi-sun' : 'pi pi-moon'" aria-hidden="true" />
           <span>{{ isDark ? 'Tema claro' : 'Tema escuro' }}</span>
         </button>
-        <form action="/logout" method="post" class="fl-logout">
+        <form v-if="session.authEnabled" action="/logout" method="post" class="fl-logout">
           <button type="submit" class="fl-logout__btn">
             <i class="pi pi-sign-out" aria-hidden="true" /> Sair
           </button>

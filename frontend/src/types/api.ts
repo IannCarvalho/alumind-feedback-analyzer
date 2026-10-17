@@ -79,6 +79,22 @@ export interface ApiError {
   detail?: string
 }
 
+/* ---- Sessão do painel (GET /auth/session, POST /login) ---- */
+
+export interface SessionResponse {
+  /** Há DASHBOARD_PASSWORD no servidor (o painel exige login). */
+  auth_enabled: boolean
+  /** Pode usar o painel: logado, ou login desligado. */
+  authenticated: boolean
+  csrf_token: string
+}
+
+export interface LoginResponse {
+  ok: boolean
+  /** Destino já filtrado pelo servidor (só caminhos locais). */
+  next: string
+}
+
 /* ---- Estatísticas do dashboard (GET /api/stats) ---- */
 
 export interface SentimentCounts {
