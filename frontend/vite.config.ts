@@ -25,6 +25,7 @@ export default defineConfig({
     // (localhost:5000), mantendo a mesma origem do ponto de vista do browser.
     proxy: {
       '/api': 'http://127.0.0.1:5000',
+      '/auth': 'http://127.0.0.1:5000',
       '/login': 'http://127.0.0.1:5000',
       '/logout': 'http://127.0.0.1:5000',
       '/health': 'http://127.0.0.1:5000',

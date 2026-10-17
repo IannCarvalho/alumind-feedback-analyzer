@@ -57,7 +57,7 @@ def secured_app():
 def admin(secured_app):
     """Client logado, com o token CSRF já em mãos."""
     client = secured_app.test_client()
-    assert login(client, PASSWORD).status_code == 302
+    assert login(client, PASSWORD).status_code == 200
     body = client.get(BASE).get_json()
     client.csrf = {"X-CSRF-Token": body["csrf_token"]}
     return client

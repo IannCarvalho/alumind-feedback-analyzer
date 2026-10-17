@@ -18,16 +18,14 @@ from urllib.parse import urlsplit
 from flask import (
     Blueprint,
     current_app,
-    flash,
     jsonify,
     redirect,
-    render_template,
     request,
     session,
     url_for,
 )
 
-from app.csrf import csrf_is_valid, rotate_csrf_token
+from app.csrf import csrf_is_valid, csrf_token, rotate_csrf_token
 from app.extensions import limiter
 
 auth = Blueprint('auth', __name__)
@@ -132,6 +130,31 @@ def api_read_required(view):
     return wrapped
 
 
+def _no_store(response):
+    """Estado de sessão e token CSRF nunca vão para cache."""
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+def _login_error(message: str, code: str, status: int):
+    return _no_store(jsonify({'error': message, 'code': code})), status
+
+
+@auth.route('/auth/session', methods=['GET'])
+def session_state():
+    """Estado da sessão do painel para o SPA. Rota pública: o login precisa dela.
+
+    ``authenticated`` é "pode usar o painel" (logado, ou login desligado), a
+    mesma regra do ``login_required``. Fica fora de ``/api/*`` de propósito: é
+    interna ao painel (mesma origem) e não entra no CORS da API pública.
+    """
+    return _no_store(jsonify({
+        'auth_enabled': auth_enabled(),
+        'authenticated': is_authenticated(),
+        'csrf_token': csrf_token(),
+    }))
+
+
 @auth.route('/login', methods=['GET', 'POST'])
 # Só o POST conta: limita a força-bruta da senha sem travar o GET da tela.
 @limiter.limit(
@@ -139,29 +162,48 @@ def api_read_required(view):
     methods=['POST'],
 )
 def login():
-    """Tela de login. Com auth desligada, redireciona direto ao dashboard."""
+    """Login do painel: o GET entrega a tela (SPA Vue) e o POST confere a senha.
+
+    O POST é JSON (``{"password": ...}`` + header ``X-CSRF-Token``, com o token
+    de ``GET /auth/session``) e responde JSON, sem redirect: o SPA navega para
+    o ``next`` devolvido aqui, já filtrado por ``safe_next_url``. Toda a
+    verificação (CSRF, senha em tempo constante, rate limit, sessão nova)
+    continua no servidor; o Vue só desenha o formulário.
+    """
+    next_url = safe_next_url(request.args.get('next'))
+
+    if request.method == 'GET':
+        if not auth_enabled() or is_authenticated():
+            return redirect(next_url)
+        # Import tardio: app.routes.spa importa este módulo (login_required).
+        from app.routes.spa import serve_index
+        return serve_index()
+
     if not auth_enabled() or is_authenticated():
-        return redirect('/')
+        return _no_store(jsonify({'ok': True, 'next': next_url}))
+    if not csrf_is_valid():
+        return _login_error(
+            'Sua sessão expirou. Recarregue a página e tente entrar de novo.', 'csrf', 400)
 
-    if request.method == 'POST':
-        if not csrf_is_valid():
-            flash('Sua sessão expirou. Tente entrar de novo.', 'warning')
-            return render_template('login.html'), 400
-        submitted = request.form.get('password', '')
-        expected = _configured_password() or ''
-        # compare_digest evita vazar o tamanho/igualdade por timing.
-        if compare_digest(submitted.encode(), expected.encode()):
-            # Sessão nova no login (evita fixação de sessão) e token CSRF novo.
-            # "Permanente" = expira após PERMANENT_SESSION_LIFETIME, em vez
-            # dos 31 dias default de um cookie assinado.
-            session.clear()
-            session.permanent = True
-            session[SESSION_KEY] = True
-            rotate_csrf_token()
-            return redirect(safe_next_url(request.args.get('next')))
-        flash('Senha incorreta. Confira a senha de acesso do painel e tente de novo.', 'danger')
+    body = request.get_json(silent=True)
+    submitted = body.get('password') if isinstance(body, dict) else None
+    if not isinstance(submitted, str):
+        submitted = ''
+    expected = _configured_password() or ''
+    # compare_digest evita vazar o tamanho/igualdade por timing.
+    if not compare_digest(submitted.encode(), expected.encode()):
+        return _login_error(
+            'Senha incorreta. Confira a senha de acesso do painel e tente de novo.',
+            'invalid_password', 401)
 
-    return render_template('login.html')
+    # Sessão nova no login (evita fixação de sessão) e token CSRF novo.
+    # "Permanente" = expira após PERMANENT_SESSION_LIFETIME, em vez
+    # dos 31 dias default de um cookie assinado.
+    session.clear()
+    session.permanent = True
+    session[SESSION_KEY] = True
+    rotate_csrf_token()
+    return _no_store(jsonify({'ok': True, 'next': next_url}))
 
 
 @auth.route('/logout', methods=['GET', 'POST'])

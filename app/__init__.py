@@ -106,8 +106,6 @@ def init_extensions(app: Flask) -> None:
         app: Flask application instance
     """
     db.init_app(app)
-    from app.csrf import init_csrf
-    init_csrf(app)
     migrate.init_app(app, db)
 
     # O Flask-Limiter lê RATELIMIT_STORAGE_URI e RATELIMIT_ENABLED do
@@ -147,17 +145,10 @@ def register_blueprints(app: Flask) -> None:
     from app.auth import auth as auth_blueprint
     app.register_blueprint(auth_blueprint)
 
-    from app.auth import auth_enabled
-
-    @app.context_processor
-    def inject_auth_flags():
-        """Disponibiliza o estado da autenticação para os templates."""
-        return {'auth_enabled': auth_enabled()}
-
     @app.errorhandler(429)
     def ratelimit_handler(error):
         """Resposta JSON para quando o rate-limit é atingido."""
-        from flask import flash, jsonify, render_template, request
+        from flask import jsonify, request
         description = getattr(error, 'description', 'rate limit exceeded')
         # Rotas da API respondem JSON; a web herda o HTML default do Flask.
         if request.path.startswith('/api'):
@@ -166,9 +157,11 @@ def register_blueprints(app: Flask) -> None:
                 'detail': str(description),
             }), 429
         if request.endpoint == 'auth.login':
-            flash('Muitas tentativas de login. Aguarde um minuto e tente de novo.',
-                  'warning')
-            return render_template('login.html'), 429
+            # O login é do SPA: JSON com a mensagem que a tela mostra.
+            return jsonify({
+                'error': 'Muitas tentativas de entrar. Espere um minuto e tente de novo.',
+                'code': 'rate_limited',
+            }), 429
         return error
 
     @app.errorhandler(413)

@@ -32,6 +32,14 @@ const router = createRouter({
       meta: { title: 'Detalhe do feedback' },
     },
     {
+      // Única rota pública do SPA (o servidor a entrega sem sessão). "bare" =
+      // sem a barra lateral do painel.
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: { title: 'Entrar', layout: 'bare' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue'),

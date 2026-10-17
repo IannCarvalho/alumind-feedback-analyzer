@@ -6,7 +6,6 @@ SECRET_KEY placeholder aceita em produção, 500s de entrada na API e a
 corrida de id duplicado.
 """
 from unittest.mock import patch
-from urllib.parse import urlencode
 
 import pytest
 
@@ -14,7 +13,7 @@ from app import create_app, db, validate_config
 from app.config import Config
 from app.extensions import limiter
 
-from tests.helpers import csrf_token, login, post_form
+from tests.helpers import csrf_token, login
 
 OK_ANALYSIS = {"sentiment": "POSITIVO", "is_spam": False, "requested_features": []}
 FEEDBACK_ID = "4042f20a-45f4-4647-8050-139ac16f610b"
@@ -49,16 +48,14 @@ def secured_client():
     "dashboard",
 ])
 def test_login_never_redirects_off_site(secured_client, target):
-    resp = post_form(
-        secured_client, f"/login?{urlencode({'next': target})}", {"password": "segredo"})
-    assert resp.status_code == 302
-    assert resp.headers["Location"] == "/"
+    resp = login(secured_client, "segredo", next_url=target)
+    assert resp.status_code == 200
+    assert resp.get_json()["next"] == "/"
 
 
 def test_login_keeps_local_next_with_query(secured_client):
-    resp = post_form(
-        secured_client, "/login?next=/feedbacks%3Fpage%3D2", {"password": "segredo"})
-    assert resp.headers["Location"] == "/feedbacks?page=2"
+    resp = login(secured_client, "segredo", next_url="/feedbacks?page=2")
+    assert resp.get_json()["next"] == "/feedbacks?page=2"
 
 
 # --- senha não-ASCII ------------------------------------------------------------
@@ -72,9 +69,9 @@ def test_non_ascii_password_does_not_crash():
         wrong = login(client, "não-é")
         right = login(client, "senha-ção")
         db.drop_all()
-    assert wrong.status_code == 200
-    assert "Senha incorreta" in wrong.get_data(as_text=True)
-    assert right.status_code == 302
+    assert wrong.status_code == 401
+    assert "Senha incorreta" in wrong.get_json()["error"]
+    assert right.status_code == 200
 
 
 # --- força-bruta ------------------------------------------------------------------
@@ -88,23 +85,25 @@ class LoginLimitedConfig(Config):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
 
 
-def test_login_post_is_rate_limited():
+def test_login_post_is_rate_limited(tmp_path):
     application = create_app(LoginLimitedConfig)
+    # Build falso do SPA para o GET /login (o CI dos testes não compila o front).
+    application.static_folder = str(tmp_path)
+    (tmp_path / "spa").mkdir()
+    (tmp_path / "spa" / "index.html").write_text("<div id=\"app\"></div>", encoding="utf-8")
     with application.app_context():
         limiter.reset()
         client = application.test_client()
         token = csrf_token(client)
-        statuses = [
-            client.post("/login", data={"password": "errada", "csrf_token": token}).status_code
-            for _ in range(3)
-        ]
-        blocked = client.post("/login", data={"password": "errada", "csrf_token": token})
+        statuses = [login(client, "errada", token=token).status_code for _ in range(3)]
+        blocked = login(client, "errada", token=token)
         # O GET da tela de login não consome o limite do POST.
         page = client.get("/login")
         limiter.reset()
-    assert statuses == [200, 200, 200]
+    assert statuses == [401, 401, 401]
     assert blocked.status_code == 429
-    assert "Muitas tentativas" in blocked.get_data(as_text=True)
+    assert blocked.get_json()["code"] == "rate_limited"
+    assert "Muitas tentativas" in blocked.get_json()["error"]
     assert page.status_code == 200
 
 

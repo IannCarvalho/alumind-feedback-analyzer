@@ -1,24 +1,15 @@
-"""Auxiliares de teste para formulários protegidos por CSRF."""
-import re
+"""Auxiliares de teste para o login do painel (JSON + CSRF)."""
+from urllib.parse import urlencode
 
-_TOKEN_RE = re.compile(r'name="csrf_token" value="([^"]+)"')
+CSRF_HEADER = "X-CSRF-Token"
 
 
 def csrf_token(client) -> str:
-    """Token CSRF da sessão do client.
+    """Token CSRF da sessão do client, como o SPA o obtém (``GET /auth/session``).
 
-    O painel virou SPA, então a única página server-rendered com o campo é o
-    ``/login`` (usado antes de logar). Depois do login o ``/login`` redireciona,
-    então o token vem da API de settings — a mesma fonte que o SPA consome.
+    Não depende do build do front: o CI dos testes Python não compila o SPA.
     """
-    match = _TOKEN_RE.search(client.get("/login").get_data(as_text=True))
-    if match:
-        return match.group(1)
-    data = client.get("/api/settings/providers").get_json(silent=True) or {}
-    token = data.get("csrf_token")
-    if token:
-        return token
-    raise AssertionError("nenhuma fonte de csrf_token (auth desligada?)")
+    return client.get("/auth/session").get_json()["csrf_token"]
 
 
 def post_form(client, path, data=None, **kwargs):
@@ -27,5 +18,15 @@ def post_form(client, path, data=None, **kwargs):
     return client.post(path, data=payload, **kwargs)
 
 
-def login(client, password, **kwargs):
-    return post_form(client, "/login", {"password": password}, **kwargs)
+def login(client, password, next_url=None, token=None, **kwargs):
+    """``POST /login`` como o SPA faz: JSON + header ``X-CSRF-Token``.
+
+    ``token`` sobrescreve o token da sessão (testes de CSRF); ``next_url``
+    vai na query string, como a tela de login repassa.
+    """
+    path = "/login" if next_url is None else f"/login?{urlencode({'next': next_url})}"
+    headers = {
+        CSRF_HEADER: csrf_token(client) if token is None else token,
+        **kwargs.pop("headers", {}),
+    }
+    return client.post(path, json={"password": password}, headers=headers, **kwargs)

@@ -5,8 +5,9 @@ todos (subdomínios irmãos, navegadores antigos, ``Lax`` com GET que muda
 estado). Aqui há uma segunda camada, sem dependência extra: um token aleatório
 POR SESSÃO, comparado em tempo constante com o que a requisição envia.
 
-- Formulários HTML: ``<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">``.
-- Chamadas JSON (``fetch``): header ``X-CSRF-Token``.
+- O SPA manda o token no header ``X-CSRF-Token``; ele o obtém de
+  ``GET /auth/session`` (antes do login) ou de ``GET /api/settings/providers``.
+- Um formulário HTML pode mandá-lo no campo ``csrf_token``.
 
 Vale para métodos que alteram estado (qualquer um fora de GET/HEAD/OPTIONS).
 O token existe ANTES do login, o que protege também o próprio ``POST /login``
@@ -15,9 +16,8 @@ quando o login acontece (veja ``rotate_csrf_token``).
 """
 import hmac
 import secrets
-from functools import wraps
 
-from flask import Flask, abort, request, session
+from flask import request, session
 
 CSRF_SESSION_KEY = 'csrf_token'
 CSRF_HEADER = 'X-CSRF-Token'
@@ -52,18 +52,3 @@ def csrf_is_valid() -> bool:
     expected = session.get(CSRF_SESSION_KEY) or ''
     sent = submitted_csrf_token()
     return bool(expected) and hmac.compare_digest(sent.encode(), expected.encode())
-
-
-def csrf_protect(view):
-    """Rejeita com 400 (HTML) a rota web que mudou estado sem token válido."""
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if not csrf_is_valid():
-            abort(400, description='Token CSRF ausente ou inválido.')
-        return view(*args, **kwargs)
-    return wrapped
-
-
-def init_csrf(app: Flask) -> None:
-    """Disponibiliza ``csrf_token()`` nos templates."""
-    app.jinja_env.globals['csrf_token'] = csrf_token

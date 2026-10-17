@@ -165,10 +165,21 @@ A aplicação estará disponível em `http://localhost:5000`.
 
 ### Autenticação do Dashboard
 
-As rotas web do painel (`/`, `/dashboard`, `/feedbacks`, `/feedback/<id>`) são protegidas por uma **senha única compartilhada**, definida em `DASHBOARD_PASSWORD`. Ao acessar sem sessão, o usuário é levado à tela de login (`/login`); a sessão fica num cookie assinado pela `SECRET_KEY`.
+As rotas web do painel (`/`, `/dashboard`, `/feedbacks`, `/feedback/<id>`) são protegidas por uma **senha única compartilhada**, definida em `DASHBOARD_PASSWORD`. Ao acessar sem sessão, o usuário é levado à tela de login (`/login`, uma tela do próprio SPA Vue); a sessão fica num cookie assinado pela `SECRET_KEY`.
 
 - **Com `DASHBOARD_PASSWORD` definida:** o painel exige login e exibe um botão "Sair".
-- **Sem `DASHBOARD_PASSWORD` (vazia):** o painel fica aberto, sem login — conveniente em desenvolvimento. Em produção sem senha, um aviso é registrado no log.
+- **Sem `DASHBOARD_PASSWORD` (vazia):** o painel fica aberto, sem login e sem botão "Sair". É conveniente em desenvolvimento. Em produção sem senha, um aviso é registrado no log.
+
+Como o login funciona: o Vue só desenha o formulário, e toda a verificação continua no servidor.
+
+| Rota | Pública | O que faz |
+|---|---|---|
+| `GET /login` | sim | Entrega a tela de login do SPA. Já autenticado (ou sem senha), redireciona para o `next`. |
+| `GET /auth/session` | sim | `{auth_enabled, authenticated, csrf_token}`, com `Cache-Control: no-store`. |
+| `POST /login` | sim | JSON `{"password": "..."}` + header `X-CSRF-Token`. Responde `200 {ok, next}`, `401 invalid_password`, `400 csrf` ou `429 rate_limited`. |
+| `GET`/`POST /logout` | sim | Encerra a sessão e volta ao login. |
+
+`/auth/session` e `/login` ficam **fora de `/api/*`** de propósito: são internas ao painel (mesma origem) e não entram no CORS da API pública. Se a sessão expira com o painel aberto, a próxima chamada da API responde `401` e o painel leva ao login, voltando depois para a tela onde o usuário estava. Ele só faz isso quando `/auth/session` confirma que há login e que a sessão acabou, para não entrar em loop num deploy sem senha.
 
 Proteções do login e da sessão:
 
@@ -176,8 +187,8 @@ Proteções do login e da sessão:
 - **Força-bruta:** o `POST /login` é limitado por IP (`RATELIMIT_LOGIN`, padrão `10 per minute`).
 - **Sessão com validade:** o login expira após `SESSION_LIFETIME_HOURS` (padrão 12h).
 - **Cookie:** `HttpOnly`, `SameSite=Lax` e `Secure` (padrão em produção; `SESSION_COOKIE_SECURE=false` só para HTTP local).
-- **Redirect pós-login:** o parâmetro `next` só aceita caminhos locais (`//host`, `/\host` e esquemas externos são descartados).
-- **CSRF:** todo `POST` do painel (login e logout) exige o campo `csrf_token`, e a API de configuração exige o header `X-CSRF-Token`. É um token aleatório por sessão, comparado em tempo constante, que é trocado no login (que também descarta a sessão anterior, contra fixação de sessão). Isso fecha o *login CSRF* e complementa o `SameSite=Lax`. Formulários novos devem incluir `<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">`.
+- **Redirect pós-login:** o parâmetro `next` só aceita caminhos locais (`//host`, `/\host` e esquemas externos são descartados). O servidor devolve o destino já filtrado, e a tela nunca navega para o `next` cru da URL.
+- **CSRF:** o `POST /login` e a API de configuração exigem o header `X-CSRF-Token`. É um token aleatório por sessão, comparado em tempo constante, que já existe antes do login e é trocado nele. O login também descarta a sessão anterior, contra fixação de sessão. Isso fecha o *login CSRF* e complementa o `SameSite=Lax`. Se o token estiver velho (servidor reiniciado, sessão expirada), a tela de login pega um novo e tenta de novo uma vez, sem mostrar erro. O logout não exige token: é idempotente, e o pior que um logout forjado faz é deslogar a própria vítima.
 
 **API de leitura:** `GET /api/feedbacks` e `GET /api/feedbacks/<id>` expõem o texto de todos os feedbacks, então seguem a mesma regra do painel. Com `DASHBOARD_PASSWORD` ou `API_READ_TOKEN` definidos, a leitura exige uma credencial; sem nenhum dos dois ela continua aberta (dev), com aviso no log em produção:
 
@@ -343,7 +354,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Sem `FEEDLENS_ENCRYPTION_KEY` o cofre fica desligado (nada é gravado em claro) e sem `DASHBOARD_PASSWORD` a API recusa tudo (`403`), porque um painel aberto não pode cadastrar chaves pagas. Uma `FEEDLENS_ENCRYPTION_KEY` malformada impede o app de subir. Se a chave de cifra for perdida ou trocada sem rotação, as chaves salvas ficam ilegíveis: são ignoradas (com aviso no log) e é preciso cadastrá-las de novo.
 
-Todas as rotas usam o cookie de sessão do painel (faça login em `/login`); as que alteram estado exigem o header `X-CSRF-Token` com o valor de `csrf_token` devolvido pelo `GET`. A chave só entra por `POST`/`PATCH` e **nunca volta**: as respostas trazem só `key_hint` (`...a1b2`).
+Todas as rotas usam o cookie de sessão do painel (faça login na tela `/login`); as que alteram estado exigem o header `X-CSRF-Token` com o valor de `csrf_token` devolvido pelo `GET`. A chave só entra por `POST`/`PATCH` e **nunca volta**: as respostas trazem só `key_hint` (`...a1b2`).
 
 | Rota | O que faz |
 |---|---|

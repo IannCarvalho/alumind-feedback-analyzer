@@ -6,12 +6,17 @@ gerados pelo ``vite build``). As rotas Jinja antigas (``/dashboard``,
 ``/feedbacks``, ``/feedback/<id>``) viram redirects para o SPA, preservando
 links salvos e o link do e-mail do resumo semanal (ver ``app/routes/web.py``).
 
-Se o build ainda não existe (``vite build`` não rodou), ``/`` responde um
+A tela de login também é do SPA, mas é a única rota PÚBLICA dele: quem a
+entrega é ``GET /login`` (``app/auth.py``), via ``serve_index``. As demais
+exigem sessão (``login_required``).
+
+Se o build ainda não existe (``vite build`` não rodou), o painel responde um
 aviso claro (503) em vez de 404, para não confundir com rota inexistente.
 
 O catch-all entrega o ``index.html`` para qualquer caminho de navegação que
-não seja de um blueprint próprio (API, health, login/logout, estáticos), para
-que um reload num deep-link do SPA (ex.: ``/feedbacks/<id>``) funcione.
+não seja de um blueprint próprio (API, sessão, health, login/logout,
+estáticos), para que um reload num deep-link do SPA (ex.: ``/feedbacks/<id>``)
+funcione.
 """
 import os
 
@@ -23,14 +28,15 @@ spa = Blueprint('spa', __name__)
 
 # Prefixos que NÃO são do SPA: têm blueprints/arquivos próprios e nunca devem
 # receber o index. O catch-all ignora qualquer caminho sob eles.
-_RESERVED_PREFIXES = ('api/', 'health', 'login', 'logout', 'static/')
+_RESERVED_PREFIXES = ('api/', 'auth/', 'health', 'login', 'logout', 'static/')
 
 
 def _spa_dir() -> str:
     return os.path.join(current_app.static_folder, 'spa')
 
 
-def _serve_index():
+def serve_index():
+    """Entrega o ``index.html`` do build, ou 503 explicando como gerá-lo."""
     index = os.path.join(_spa_dir(), 'index.html')
     if not os.path.isfile(index):
         abort(
@@ -47,7 +53,7 @@ def _serve_index():
 @login_required
 def serve_root():
     """O SPA é o painel padrão."""
-    return _serve_index()
+    return serve_index()
 
 
 @spa.route('/<path:subpath>')
@@ -55,10 +61,10 @@ def serve_root():
 def serve_spa(subpath: str):
     """Entrega o index para deep-links do SPA; o roteamento fino é do Vue Router.
 
-    Caminhos reservados (API, health, login/logout, estáticos) têm rotas
-    próprias e, se chegarem aqui, é porque não existem: devolve 404 em vez de
-    mascarar com o index.
+    Caminhos reservados (API, sessão, health, login/logout, estáticos) têm
+    rotas próprias e, se chegarem aqui, é porque não existem: devolve 404 em
+    vez de mascarar com o index.
     """
     if subpath.startswith(_RESERVED_PREFIXES):
         abort(404)
-    return _serve_index()
+    return serve_index()
