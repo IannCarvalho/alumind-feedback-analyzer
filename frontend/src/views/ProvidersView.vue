@@ -45,7 +45,8 @@ function openDialog() {
 async function submit() {
   formError.value = null
   if (!form.value.api_key.trim()) {
-    formError.value = 'Informe a chave do provedor.'
+    formError.value =
+      'Cole a chave de API do provedor selecionado para salvar. Você a gera no painel do próprio provedor (ex.: platform.openai.com, console.anthropic.com).'
     return
   }
   saving.value = true
@@ -56,9 +57,12 @@ async function submit() {
       model: form.value.model.trim() || undefined,
     })
     showDialog.value = false
-    notice.value = 'Chave salva e verificada.'
+    notice.value = 'Chave salva e verificada. Já entra na cadeia de análise.'
   } catch (e) {
-    formError.value = e instanceof HttpError ? e.message : 'Não foi possível salvar a chave.'
+    formError.value =
+      e instanceof HttpError
+        ? e.message
+        : 'Não foi possível salvar a chave. Confira a chave e a conexão, e tente de novo.'
   } finally {
     saving.value = false
   }
@@ -74,7 +78,10 @@ async function run(id: string, action: () => Promise<void>, ok?: string) {
     await action()
     if (ok) notice.value = ok
   } catch (e) {
-    error.value = e instanceof HttpError ? e.message : 'A operação falhou.'
+    error.value =
+      e instanceof HttpError
+        ? e.message
+        : 'A operação não foi concluída. Verifique sua conexão e tente novamente.'
   } finally {
     busyId.value = null
   }
@@ -83,9 +90,19 @@ async function run(id: string, action: () => Promise<void>, ok?: string) {
 async function testKey(row: ProviderCredential) {
   await run(row.id, async () => {
     const result = await store.test(row.id)
-    notice.value = result.ok
-      ? `Chave de ${row.provider} verificada${result.latency_ms ? ` (${result.latency_ms} ms)` : ''}.`
-      : `A chave de ${row.provider} falhou: ${result.kind ?? 'erro'}.`
+    if (result.ok) {
+      notice.value = `Chave de ${row.provider} verificada${result.latency_ms ? ` (${result.latency_ms} ms)` : ''}.`
+      return
+    }
+    const hint =
+      result.kind === 'auth'
+        ? 'o provedor recusou a chave — gere uma nova no painel dele e cadastre de novo'
+        : result.kind === 'rate_limit'
+          ? 'o provedor está limitando as chamadas — espere um pouco e teste de novo'
+          : result.kind === 'timeout'
+            ? 'a chamada expirou — verifique a conexão e tente de novo'
+            : `falhou (${result.kind ?? 'erro'}) — tente de novo em instantes`
+    error.value = `A chave de ${row.provider} não passou no teste: ${hint}.`
   })
 }
 
@@ -110,7 +127,10 @@ onMounted(async () => {
   try {
     await store.load()
   } catch (e) {
-    error.value = e instanceof HttpError ? e.message : 'Não foi possível carregar os provedores.'
+    error.value =
+      e instanceof HttpError
+        ? e.message
+        : 'Não foi possível carregar os provedores. Recarregue a página; se persistir, verifique se o servidor está no ar.'
   }
 })
 </script>
@@ -142,9 +162,9 @@ onMounted(async () => {
       <Message v-if="notice" severity="success" :closable="true">{{ notice }}</Message>
 
       <Message v-if="!store.manageEnabled" severity="info" :closable="false">
-        Gerenciamento de chaves desligado neste ambiente (defina
-        <code>DASHBOARD_PASSWORD</code> no servidor para cadastrar e testar chaves).
-        A análise usa as chaves do ambiente, abaixo.
+        <strong>Modo somente leitura.</strong> Para cadastrar, testar e reordenar chaves,
+        defina a variável <code>DASHBOARD_PASSWORD</code> no servidor e faça login no painel.
+        Enquanto isso, a análise continua usando as chaves do ambiente, listadas abaixo.
       </Message>
 
       <Message
@@ -152,8 +172,10 @@ onMounted(async () => {
         severity="info"
         :closable="false"
       >
-        O cofre de chaves está desligado (defina <code>FEEDLENS_ENCRYPTION_KEY</code>).
-        A análise usa apenas as chaves do ambiente, listadas abaixo.
+        <strong>Cofre de chaves desligado.</strong> Para salvar chaves de provedor pela
+        tela, gere uma chave Fernet e defina <code>FEEDLENS_ENCRYPTION_KEY</code> no servidor
+        (<code>python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code>).
+        Sem ela, use as chaves do ambiente, listadas abaixo.
       </Message>
 
       <Card class="fl-chain">
