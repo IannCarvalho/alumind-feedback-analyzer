@@ -85,6 +85,7 @@ feedlens/
 ### Pré-requisitos
 
 - Python 3.10 ou superior
+- Node.js 20.19+ ou 22.12+, para compilar o painel (não é necessário com Docker)
 - PostgreSQL ou outro banco de dados SQL (ou SQLite para desenvolvimento)
 - Chave de API de pelo menos um provedor de LLM (OpenAI, Anthropic ou Google Gemini), no servidor ou enviada por requisição
 
@@ -153,6 +154,15 @@ flask db upgrade
 
 ### Executando a Aplicação
 
+O painel é um SPA Vue (em `frontend/`) que o Flask serve já compilado. Compile-o uma vez, e de novo sempre que mudar algo em `frontend/`:
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run build
+```
+
+Sem esse build, a raiz do painel responde `503` com essa mesma instrução.
+
 Para iniciar a aplicação em modo de desenvolvimento:
 
 ```bash
@@ -190,7 +200,7 @@ A API (`/api/...`) **não** é afetada por essa autenticação de formulário: o
 
 ### Executando com Docker
 
-O projeto inclui um `Dockerfile` (gunicorn servindo `wsgi:app`) e um `docker-compose.yml` que sobe a aplicação junto de um PostgreSQL.
+O projeto inclui um `Dockerfile` (gunicorn servindo `wsgi:app`) e um `docker-compose.yml` que sobe a aplicação junto de um PostgreSQL. A imagem compila o painel num estágio Node à parte (build multi-stage), então o host não precisa de Node, e só o resultado estático vai para a imagem final. O job `docker` do CI builda a imagem e confere que ela serve o painel.
 
 O compose exige uma `SECRET_KEY` aleatória (32+ caracteres) e falha logo no `up` sem ela; defina-a no `.env` ou no shell (ex.: `$env:SECRET_KEY = python -c "import secrets; print(secrets.token_urlsafe(48))"` no PowerShell). Como ele serve HTTP em `localhost`, o compose desliga o cookie `Secure` por padrão (`SESSION_COOKIE_SECURE=false`).
 
