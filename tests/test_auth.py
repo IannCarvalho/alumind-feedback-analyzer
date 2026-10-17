@@ -64,6 +64,28 @@ def test_logout_clears_session(secured_client):
     assert secured_client.get("/dashboard").status_code == 302
 
 
+def test_logout_get_also_logs_out(secured_client):
+    """GET /logout (URL na barra) desloga e redireciona, sem tela de 400."""
+    login(secured_client, "segredo")
+    assert secured_client.get("/dashboard").status_code == 200
+
+    resp = secured_client.get("/logout", follow_redirects=False)
+    assert resp.status_code == 302
+    # Deslogou: o dashboard volta a bloquear.
+    assert secured_client.get("/dashboard").status_code == 302
+
+
+def test_logout_without_csrf_still_logs_out(secured_client):
+    """POST /logout sem token (sessão expirada/servidor reiniciado) nunca
+    mostra 400: desloga mesmo assim e redireciona."""
+    login(secured_client, "segredo")
+    assert secured_client.get("/dashboard").status_code == 200
+
+    resp = secured_client.post("/logout")  # sem csrf_token
+    assert resp.status_code == 302
+    assert secured_client.get("/dashboard").status_code == 302
+
+
 def test_login_rejects_open_redirect(secured_client):
     """O parâmetro next só aceita caminhos locais (anti open-redirect)."""
     resp = post_form(

@@ -43,7 +43,7 @@ onMounted(() => {
         <BrandLogo :size="34" />
         <div>
           <div class="fl-brand__name">FeedLens</div>
-          <div class="fl-brand__tag">traga sua lente</div>
+          <div class="fl-brand__tag">análise de feedback</div>
         </div>
       </div>
       <nav class="fl-nav">
