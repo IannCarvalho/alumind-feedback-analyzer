@@ -127,3 +127,35 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  docker:
+    # Builda a imagem de produção e confere que ela serve o painel: o front é
+    # compilado dentro do Dockerfile (estágio Node), não vem do repositório.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build da imagem
+        run: docker build -t feedlens:ci .
+
+      - name: Smoke test (painel e assets servidos pela imagem)
+        run: |
+          docker run -d --name feedlens -p 5000:5000 \
+            -e FLASK_ENV=production \
+            -e SECRET_KEY=ci-smoke-secret-key-0123456789abcdef \
+            -e DATABASE_URL=sqlite:////tmp/feedlens.db \
+            feedlens:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:5000/health > /dev/null && break
+            sleep 1
+          done
+          curl -fsS http://localhost:5000/health
+          curl -fsS http://localhost:5000/ > index.html
+          grep -q '<div id="app">' index.html
+          asset=$(grep -o '/static/spa/assets/[^"]*\.js' index.html | head -n 1)
+          test -n "$asset"
+          curl -fsS -o /dev/null "http://localhost:5000$asset"
+
+      - name: Logs do container
+        if: failure()
+        run: docker logs feedlens

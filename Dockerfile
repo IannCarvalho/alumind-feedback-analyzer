@@ -1,3 +1,20 @@
+# Estágio 1: compila o front Vue (Vite). Só o resultado estático segue para a
+# imagem final; Node e node_modules ficam neste estágio.
+# Node 20, a mesma versão do job "frontend" do CI.
+FROM node:20-slim AS frontend
+
+WORKDIR /build/frontend
+
+# Dependências primeiro, para aproveitar o cache de camadas
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+# O vite.config.ts grava o build em ../app/static/spa (aqui, /build/app/static/spa)
+COPY frontend/ ./
+RUN npm run build
+
+
+# Estágio 2: a aplicação Python
 FROM python:3.11-slim
 
 # Evita .pyc e deixa o log sair sem buffer (bom para containers)
@@ -17,6 +34,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia o restante da aplicação
 COPY . .
+
+# O painel (SPA) é gerado, não comitado: vem do estágio 1. Sem ele, a raiz
+# do painel responde 503 ("o front ainda não foi compilado").
+COPY --from=frontend /build/app/static/spa ./app/static/spa
 
 EXPOSE 5000
 
