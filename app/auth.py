@@ -159,7 +159,7 @@ def login():
             session[SESSION_KEY] = True
             rotate_csrf_token()
             return redirect(safe_next_url(request.args.get('next')))
-        flash('Senha incorreta.', 'danger')
+        flash('Senha incorreta. Confira a senha de acesso do painel e tente de novo.', 'danger')
 
     return render_template('login.html')
 

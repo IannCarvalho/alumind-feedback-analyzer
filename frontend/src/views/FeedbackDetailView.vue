@@ -22,9 +22,13 @@ onMounted(async () => {
     feedback.value = await store.getById(route.params.id as string)
   } catch (e) {
     if (e instanceof HttpError && e.status === 404) {
-      error.value = 'Esse feedback não existe.'
+      error.value =
+        'Esse feedback não existe ou foi removido. Use “Voltar aos feedbacks” para ver a lista atual.'
     } else {
-      error.value = e instanceof HttpError ? e.message : 'Não foi possível carregar o feedback.'
+      error.value =
+        e instanceof HttpError
+          ? e.message
+          : 'Não foi possível carregar o feedback. Recarregue a página; se persistir, verifique se o servidor está no ar.'
     }
   } finally {
     loading.value = false

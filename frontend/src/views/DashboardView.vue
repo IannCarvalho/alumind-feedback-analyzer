@@ -21,7 +21,10 @@ onMounted(async () => {
   try {
     await store.load()
   } catch (e) {
-    error.value = e instanceof HttpError ? e.message : 'Não foi possível carregar as estatísticas.'
+    error.value =
+      e instanceof HttpError
+        ? e.message
+        : 'Não foi possível carregar as estatísticas. Recarregue a página; se persistir, verifique se o servidor está no ar.'
   }
 })
 
@@ -44,7 +47,8 @@ function truncate(text: string, max = 60): string {
     <Message v-else-if="error" severity="warn" :closable="false">{{ error }}</Message>
 
     <Message v-else-if="!hasData" severity="info" :closable="false">
-      Nenhum feedback foi registrado ainda.
+      Ainda não há feedbacks para analisar. Assim que o primeiro chegar pela API
+      (<code>POST /api/feedbacks</code>), os números e gráficos aparecem aqui.
     </Message>
 
     <template v-else-if="stats">

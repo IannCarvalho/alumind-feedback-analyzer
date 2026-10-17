@@ -29,7 +29,10 @@ async function load(page = 1) {
   try {
     await store.list({ page, perPage, sentiment: sentimentFilter.value })
   } catch (e) {
-    error.value = e instanceof HttpError ? e.message : 'Não foi possível carregar os feedbacks.'
+    error.value =
+      e instanceof HttpError
+        ? e.message
+        : 'Não foi possível carregar os feedbacks. Recarregue a página; se persistir, verifique se o servidor está no ar.'
   }
 }
 
@@ -81,7 +84,16 @@ onMounted(() => load(1))
       @page="onPage"
       @row-select="openDetail($event.data)"
     >
-      <template #empty>Nenhum feedback encontrado.</template>
+      <template #empty>
+        <span v-if="sentimentFilter">
+          Nenhum feedback com esse sentimento. Troque o filtro para “Todos os sentimentos”
+          para ver todos.
+        </span>
+        <span v-else>
+          Nenhum feedback ainda. Assim que chegarem pela API
+          (<code>POST /api/feedbacks</code>), eles aparecem nesta lista.
+        </span>
+      </template>
 
       <Column header="Sentimento" style="width: 10rem">
         <template #body="{ data }">
