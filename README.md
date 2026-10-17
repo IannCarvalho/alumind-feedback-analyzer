@@ -100,12 +100,17 @@ cd feedlens
 ```bash
 python -m venv venv
 
-# No Windows
-venv\Scripts\activate
+# No Windows (PowerShell)
+.\venv\Scripts\Activate.ps1
+
+# No Windows (cmd)
+venv\Scripts\activate.bat
 
 # No Linux/macOS
 source venv/bin/activate
 ```
+
+   Se o PowerShell recusar o script de ativação, libere scripts locais para o seu usuário com `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
 3. Instale as dependências:
 ```bash
@@ -115,28 +120,35 @@ pip install -r requirements.txt
 4. Crie um arquivo `.env` baseado no `.env-example`:
 ```bash
 cp .env-example .env
+
+# No Windows (PowerShell)
+Copy-Item .env-example .env
 ```
 
-5. Edite o arquivo `.env` com suas credenciais:
+5. Ajuste o `.env`. Como vem do `.env-example`, ele já roda localmente sem editar nada: banco SQLite (o arquivo fica em `instance/feedlens.db`) e painel aberto, sem login. Para testar o login e o cofre de provedores, preencha estas linhas:
 ```
-FLASK_APP=run.py
-FLASK_ENV=development
-SECRET_KEY=sua_chave_secreta
 DASHBOARD_PASSWORD=senha_de_acesso_ao_painel
-DATABASE_URL=postgresql://usuario:senha@localhost/feedlens
+# Gere com: python -c "import secrets; print(secrets.token_urlsafe(48))"
+SECRET_KEY=sua_chave_secreta
+# Gere com: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FEEDLENS_ENCRYPTION_KEY=sua_chave_fernet
+```
+
+   Gere as duas chaves uma vez e mantenha-as fixas: trocar a `SECRET_KEY` derruba as sessões abertas, e trocar a `FEEDLENS_ENCRYPTION_KEY` sem rotação deixa ilegíveis as chaves de provedor já salvas.
+
+   Opcionais: chaves de LLM no servidor (ou cadastre-as depois na tela de provedores) e o e-mail do resumo semanal:
+```
 # LLM: preencha só os provedores que usar (OPENAI_/ANTHROPIC_/GEMINI_API_KEY)
 ANTHROPIC_API_KEY=sua_chave_anthropic
-# Opcional: ordem principal -> reservas, no formato provedor/modelo
+# Ordem principal -> reservas, no formato provedor/modelo
 LLM_MODELS=anthropic/claude-haiku-4-5
-LLM_TIMEOUT=30
-LLM_MAX_RETRIES=2
 EMAIL_HOST=smtp.exemplo.com
-EMAIL_PORT=587
 EMAIL_USER=seu_email@exemplo.com
 EMAIL_PASSWORD=sua_senha_email
-EMAIL_USE_TLS=true
 EMAIL_RECIPIENTS=stakeholder1@exemplo.com,stakeholder2@exemplo.com
 ```
+
+   Em produção, aponte o `DATABASE_URL` para o PostgreSQL (`postgresql://usuario:senha@host/feedlens`). As demais variáveis (timeouts, limites, porta e TLS do e-mail) têm padrão e estão comentadas no `.env-example`.
 
 6. Crie as tabelas aplicando as migrations versionadas (`migrations/versions/`):
 ```bash
@@ -161,7 +173,14 @@ flask run
 
 A aplicação estará disponível em `http://localhost:5000`.
 
-> **Nota de segurança:** por padrão, em desenvolvimento, o servidor roda com `debug=True` e faz bind em `0.0.0.0`. Em produção, use um servidor WSGI (ex: `gunicorn`), desligue o debug e defina `FLASK_ENV=production`.
+> **Nota de segurança:** o `flask run` escuta só em `127.0.0.1` e sobe sem debug. O `python run.py` é diferente: em desenvolvimento ele liga o debug e escuta em `0.0.0.0`, o que expõe o debugger do Werkzeug na sua rede. Prefira o `flask run`. Em produção, use um servidor WSGI (ex: `gunicorn`) e defina `FLASK_ENV=production`.
+
+Problemas comuns ao rodar localmente:
+
+- **`Connection refused` na porta 5432 no `flask db upgrade`:** o `DATABASE_URL` aponta para um PostgreSQL que não está rodando. Use o SQLite padrão do `.env-example`, ou suba só o banco do compose (`docker compose up -d db`) e use `postgresql://feedlens:feedlens@localhost:5432/feedlens`.
+- **A raiz responde `503`:** falta compilar o painel (`npm --prefix frontend ci` e depois `npm --prefix frontend run build`).
+- **`no such table` no log:** faltou aplicar as migrations (`flask db upgrade`).
+- **`Port 5000 is in use by another program`:** outro processo já usa a porta. Pare-o ou rode `flask run --port 5001`.
 
 ### Autenticação do Dashboard
 
