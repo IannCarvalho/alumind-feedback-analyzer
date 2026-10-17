@@ -44,7 +44,7 @@ def safe_next_url(target: str | None) -> str:
     ``/`` e descartam tab/quebra de linha, então ``/\\evil.com`` e
     ``/\\t/evil.com`` também viram ``//evil.com``.
     """
-    fallback = url_for('web.dashboard')
+    fallback = '/'
     if not target:
         return fallback
     if '\\' in target or any(ord(char) < 32 for char in target):
@@ -141,7 +141,7 @@ def api_read_required(view):
 def login():
     """Tela de login. Com auth desligada, redireciona direto ao dashboard."""
     if not auth_enabled() or is_authenticated():
-        return redirect(url_for('web.dashboard'))
+        return redirect('/')
 
     if request.method == 'POST':
         if not csrf_is_valid():

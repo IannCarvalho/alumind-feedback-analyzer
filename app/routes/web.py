@@ -1,77 +1,48 @@
+"""Compatibilidade das rotas de página antigas (Jinja), agora servidas pelo SPA.
+
+O painel virou um SPA Vue servido na raiz (ver ``app/routes/spa.py``). As URLs
+antigas renderizadas por Jinja (``/dashboard``, ``/feedbacks``,
+``/feedback/<id>``) continuam existindo como **redirects** para a rota
+equivalente do SPA, para não quebrar links salvos nem o link do e-mail do
+resumo semanal. Os dados são servidos pela API (``/api/...``); aqui não há
+mais render de template.
+"""
 import uuid
 
-from flask import Blueprint, render_template, request, redirect, url_for, abort
+from flask import Blueprint, redirect, request
 from app.auth import login_required
-from app.services.statistics_service import Statistics
-from app.services.feedback_service import FeedbackService
 
 web = Blueprint('web', __name__)
-
-
-@web.route('/')
-@login_required
-def index():
-    """Redirect to the dashboard page"""
-    return redirect(url_for('web.dashboard'))
 
 
 @web.route('/dashboard')
 @login_required
 def dashboard():
-    """
-    Main dashboard page
-
-    Displays feedback statistics and a list of most recent feedbacks
-    """
-    # Get statistics from the service
-    stats = Statistics.get_dashboard_statistics()
-
-    # Get recent feedbacks if we have data
-    if stats['has_data']:
-        stats['recent_feedbacks'] = FeedbackService.get_recent_feedbacks()
-
-    return render_template('dashboard.html', **stats)
-
-
-@web.route('/feedback/<feedback_id>')
-@login_required
-def feedback_detail(feedback_id: str):
-    """
-    Feedback details page
-
-    Args:
-        feedback_id: UUID of the feedback to display
-    """
-    # Um id malformado estoura no bind do UUID (500); para o usuário é só
-    # um feedback que não existe.
-    try:
-        uuid.UUID(feedback_id)
-    except ValueError:
-        abort(404)
-    feedback = FeedbackService.get_feedback_by_id(feedback_id)
-    if not feedback:
-        abort(404)
-    return render_template('feedback_detail.html', feedback=feedback)
+    """URL antiga do dashboard -> raiz do SPA."""
+    return redirect('/', code=301)
 
 
 @web.route('/feedbacks')
 @login_required
 def feedback_list():
-    """
-    Feedback listing page with filters
-
-    Query Parameters:
-        sentiment: Filter by sentiment (POSITIVO, NEGATIVO, INCONCLUSIVO)
-        page: Page number for pagination (default: 1)
-    """
-    # Get filter parameters
+    """URL antiga da lista -> lista do SPA, preservando o filtro de sentimento."""
     sentiment = request.args.get('sentiment')
-    page = request.args.get('page', 1, type=int)
+    target = '/feedbacks'
+    if sentiment:
+        target = f'/feedbacks?sentiment={sentiment}'
+    return redirect(target, code=301)
 
-    # Get filtered feedbacks
-    feedback_data = FeedbackService.get_filtered_feedbacks(
-        sentiment=sentiment,
-        page=page
-    )
 
-    return render_template('feedback_list.html', **feedback_data)
+@web.route('/feedback/<feedback_id>')
+@login_required
+def feedback_detail(feedback_id: str):
+    """URL antiga do detalhe -> detalhe do SPA (/feedbacks/<id>).
+
+    Um id malformado nunca foi um feedback válido: 404, como antes.
+    """
+    try:
+        uuid.UUID(feedback_id)
+    except ValueError:
+        from flask import abort
+        abort(404)
+    return redirect(f'/feedbacks/{feedback_id}', code=301)
